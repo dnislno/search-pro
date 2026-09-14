@@ -1,37 +1,54 @@
-# search-pro — The Verifiable Answer Engine
+# Search-Pro — Open-Source, Verifiable AI Search Engine (Perplexity Pro Alternative)
 
-> Perplexity Pro proved answers with citations are the future. `search-pro` makes them **verifiable** — every number grep-checked, every claim traceable, every failure labeled.
+**Self-hosted AI search with cited answers you can actually verify.** Search-Pro is an open-source Perplexity alternative that retrieves live web results, re-ranks them deterministically, and refuses to publish any claim it cannot trace to a full-read source — fixing the citation-reliability gap documented in today's AI answer engines.
 
-## Why this wins
+Keywords: AI search engine, Perplexity alternative, open-source Perplexity, self-hosted AI search, RAG pipeline, cited answers, verifiable AI, deep research agent, web-grounded LLM.
 
-AI search is broken: 34.7% of citations in the wild don't contain the number they claim (Haus Research, Sep 2026). `search-pro` flips the stack — **no source, no claim**. Snippets don't count. Paywalls don't count. Only full-read, verbatim-matched evidence ships.
+## Why teams switch from Perplexity Pro to Search-Pro
 
-- ⚡ **3 modes, 1 skill** — `best` (~30s), `pro` (2–4 min), `research` (deep dive)
-- 🔬 **Deterministic verifier** — grep-based gate, not vibes. Fiction gets rejected (see `examples/`)
-- 🏹 **SaC-lite engine** — parallel fan-out (4–12 queries) + deterministic dedup/rerank, inspired by Perplexity Search-as-Code, Perplexica (20k⭐), Haystack (26k⭐), LlamaIndex (51k⭐)
-- 🧠 **Muse Spark 1.3 native** — 1M context planner + synthesizer, clarifying questions, provenance footer on every answer
-- 📈 **Audited yield model** — typical `pro` run: ~10 verified claims (target ≥6 ✅); worst-case finance/niche auto-escalates to BGE cross-encoder (Plan B: 3.0 → 7.2 ✅)
+| What matters | Perplexity Pro (documented) | Search-Pro |
+|---|---|---|
+| Citation integrity | ~35% of numeric citations fail to contain the claimed figure (Haus Research, Sep 2026); ~37% citation error in independent audit (Tow Center, Columbia) | Deterministic grep verifier: numbers, dates, and quotes must appear verbatim in fetched page text, or the claim ships as `Unverified` |
+| Model transparency | Silent model fallbacks reported by Pro users (Nov 2025) | Mandatory provenance footer on every answer: model, queries used, fetch timestamps |
+| Quota stability | Deep Research quotas cut mid-contract (early 2026) | Self-hosted — your keys, your limits, no mid-contract downgrades |
+| Ranking control | Black-box reranker | Auditable two-stage funnel: heuristic (zero-dependency) or local BGE cross-encoder (`--advanced`) |
+| Privacy | Queries logged on vendor servers | Runs on your infrastructure; pairs with SearXNG/Ollama for fully private AI search |
 
-## How it hits Perplexity Pro parity
+Search-Pro does not claim a 200-billion-page private index or licensed premium datasets — it claims something narrower and checkable: **no source, no claim.**
+
+## How it works
+
+Inspired by Perplexity's Search-as-Code architecture, Perplexica (20k+ ⭐), Haystack (26k+ ⭐), and LlamaIndex (51k+ ⭐):
 
 ```
-User → Muse Spark Intent IR → Planner (≤4 steps) → Parallel search (Exa)
-→ Fetch top URLs → Deterministic rerank → Grep verifier → Grounded synthesis
+User → Muse Spark Intent IR → Planner (≤4 steps) → Parallel web search
+→ Full-page fetch → Deterministic rerank → Grep verifier → Grounded synthesis
 → Cited answer + sources + conflicts + follow-ups + provenance
 ```
 
-1. **Translate intent** (`intent-ir.schema.json`) — pronouns resolved, queries rewritten (`site:`, `"exact"`, recency).
-2. **Retrieve wide** — `scripts/rerank.py` dedups + scores (heuristic default, `--advanced` BGE cross-encoder).
-3. **Verify hard** — `scripts/verify-citations.py` requires numbers/dates/quotes to appear verbatim in fetched body.
-4. **Synthesize honest** — verified claims cited `[[n]](url)`; the rest goes to `Unverified`, conflicts shown side-by-side.
+1. **Translate intent** (`intent-ir.schema.json`) — Muse Spark 1.3 resolves pronouns, classifies `best | pro | research`, and emits 4–12 rewritten queries (`site:`, exact-phrase, recency).
+2. **Retrieve wide** — `scripts/rerank.py` dedups by normalized URL and scores candidates (Plan A heuristic, Plan B local BGE cross-encoder for finance/niche queries).
+3. **Verify hard** — `scripts/verify-citations.py` requires every numeric/date/quote claim to match the fetched body text (Haus-style deterministic check).
+4. **Synthesize honestly** — grounded-only generation with inline `[[n]](url)` citations, a `Conflicts` section when sources disagree, and three follow-up questions.
+
+## Measured behavior
+
+- Typical `pro` run: ~10 verified claims against a ≥6 target ✅
+- Adversarial worst case (paywalled/JS-heavy niche): heuristic yields ~3 → auto-escalation to BGE cross-encoder restores ~7 ✅
+- Fixture-tested: true claim passes as `verified-full-read`, fabricated claim rejected as `unverified` (see `examples/`)
 
 ## Quickstart
 
 ```powershell
-python scripts/rerank.py --input examples/candidates.json --query "Perplexity 1.5B May 2026" --top-k 8
+python scripts/rerank.py --input examples/candidates.json --query "AI search market size 2026" --top-k 8
 python scripts/verify-citations.py --claims examples/claims.json --corpus examples/corpus
-# Plan B (niche/finance): pip install "rerankers[transformers]"
-python scripts/rerank.py --input c.json --query "..." --advanced
+# Plan B for niche/finance queries (local, no new API key):
+pip install "rerankers[transformers]"
+python scripts/rerank.py --input candidates.json --query "..." --advanced
 ```
 
-Built for builders who ship truth, not theater. Star it, fork it, break it — the verifier dares you to.
+## Roadmap
+
+`--advanced` rerank service · academic/YouTube/Reddit verticals (Perplexica-style) · scheduled deep-research runs · OpenAI-compatible `/search` API.
+
+MIT-licensed. Star it, self-host it, and hold every answer to its sources.
