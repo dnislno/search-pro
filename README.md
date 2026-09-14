@@ -37,7 +37,25 @@ User → Muse Spark Intent IR → Planner (≤4 steps) → Parallel web search
 - Adversarial worst case (paywalled/JS-heavy niche): heuristic yields ~3 → auto-escalation to BGE cross-encoder restores ~7 ✅
 - Fixture-tested: true claim passes as `verified-full-read`, fabricated claim rejected as `unverified` (see `examples/`)
 
-## Quickstart
+## Quickstart — one command, local
+
+```powershell
+# Offline demo (no keys, no network): full pipeline on fixtures
+python search.py --dry-run
+
+# Live: pick a provider (SearXNG = free/self-hosted, Exa = API key)
+$env:SEARXNG_URL = "http://localhost:8888"   # or a public instance
+python search.py --query "AI search market size 2026" --mode pro
+
+$env:EXA_API_KEY = "exa-..."                 # alternative
+python search.py --query "Perplexity vs ChatGPT accuracy" --mode best --provider exa
+
+# Fluent rewrite via LLM (re-verified; default is offline extractive):
+$env:ANTHROPIC_API_KEY = "sk-ant-..."        # or OPENAI_API_KEY
+python search.py --query "..." --mode research --synth llm --advanced --out answer.md
+```
+
+## Module-level usage
 
 ```powershell
 python scripts/rerank.py --input examples/candidates.json --query "AI search market size 2026" --top-k 8
