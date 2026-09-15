@@ -63,8 +63,11 @@ def main():
     stats = {"n": len(claims), "verified": len(verified),
              "unverified": len(unverified),
              "pass_rate": round(len(verified) / max(1, len(claims)), 3)}
-    json.dump({"verified": verified, "unverified": unverified, "stats": stats},
-              sys.stdout, ensure_ascii=False, indent=2)
+    payload = {"verified": verified, "unverified": unverified, "stats": stats}
+    try:
+        json.dump(payload, sys.stdout, ensure_ascii=False, indent=2)
+    except UnicodeEncodeError:  # e.g. Windows cp1252 console/pipe
+        json.dump(payload, sys.stdout, ensure_ascii=True, indent=2)
 
 if __name__ == "__main__":
     main()

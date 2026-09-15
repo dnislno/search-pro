@@ -43,7 +43,9 @@ def plan_queries(query, mode):
 
 
 def run(cmd):
-    p = subprocess.run(cmd, capture_output=True, text=True)
+    env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
+    p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
+                       env=env)
     if p.returncode != 0:
         raise RuntimeError(f"{' '.join(cmd)} failed: {p.stderr.strip()[:500]}")
     return p.stdout

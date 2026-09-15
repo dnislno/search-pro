@@ -39,7 +39,9 @@ def main():
                "--searxng-url", a.searxng_url, "--synth", "extractive",
                "--run-json", out]
         t0 = time.time()
-        p = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
+        p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
+                           env=env, timeout=300)
         dt = round(time.time() - t0, 1)
         row = {"id": q["id"], "cat": q["cat"], "exit": p.returncode,
                "elapsed_s": dt}

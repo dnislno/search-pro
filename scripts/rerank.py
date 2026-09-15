@@ -84,7 +84,10 @@ def main():
     uniq.sort(key=lambda c: c.get("_score", 0), reverse=True)
     for c in uniq[:a.top_k]:
         c["_method"] = method
-    json.dump(uniq[:a.top_k], sys.stdout, ensure_ascii=False, indent=2)
+    try:
+        json.dump(uniq[:a.top_k], sys.stdout, ensure_ascii=False, indent=2)
+    except UnicodeEncodeError:  # e.g. Windows cp1252 console/pipe
+        json.dump(uniq[:a.top_k], sys.stdout, ensure_ascii=True, indent=2)
 
 if __name__ == "__main__":
     main()
