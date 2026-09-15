@@ -33,7 +33,11 @@ SOCIAL = ("x.com", "twitter.com", "facebook.com", "instagram.com",
           "threads.net", "bsky.app")
 DERIV = SOCIAL + ("blogspot", "wordpress.com", "medium.com", "msn.com",
                   "yahoo.com", "aol.com", "tumblr.com")
-PRIMARY_ENDS = (".gov", ".go.id", ".edu", ".ac.id", ".mil", ".int")
+PRIMARY_ENDS = (".gov", ".go.id", ".edu", ".ac.id", ".mil", ".int",
+                ".sch.id", ".or.id")
+# v2.6 3.2: high-authority non-government publishers count as primary.
+PRIMARY_HOSTS = ("arxiv.org", "nature.com", "science.org", "ieee.org",
+                 "acm.org", "who.int", "worldbank.org", "imf.org")
 
 
 def norm_fig(fig):
@@ -99,11 +103,45 @@ def origin_of(url, text):
 
 def reliability(url):
     h = host_of(url)
-    if h.endswith(PRIMARY_ENDS):
+    if h.endswith(PRIMARY_ENDS) or h in PRIMARY_HOSTS:
         return "primary"
     if origin_of(url, "").startswith("pointer:"):
         return "derivative"
     return "secondary"
+
+
+AUTHORITY_POINTS = {"primary": 2, "secondary": 1, "derivative": 0}
+
+
+def authority_score(url):
+    """v2.6 3.2: numeric authority weight for a source URL."""
+    return AUTHORITY_POINTS[reliability(url)]
+
+
+def diversity_report(urls):
+    """v2.6 3.2: source diversity summary over a list of URLs.
+
+    Groups by publisher origin (same-wire collapse inherited from
+    origin_of); pointers counted separately. Returns dict with counts,
+    per-tier authority split, distinct publishers, and the largest
+    single-publisher share (echo-chamber indicator).
+    """
+    urls = [u for u in (urls or []) if u]
+    origins, tiers = {}, {"primary": 0, "secondary": 0, "derivative": 0}
+    for u in urls:
+        org = origin_of(u, "")
+        origins[org] = origins.get(org, 0) + 1
+        tiers[reliability(u)] += 1
+    n = len(urls)
+    top_share = round(max(origins.values()) / max(1, n), 3) if origins else 0.0
+    return {"n_sources": n, "n_publishers": len(origins),
+            "authority": tiers,
+            "authority_mean": round(sum(authority_score(u) for u in urls)
+                                    / max(1, n), 3),
+            "pointer_ratio": round(sum(1 for u in urls
+                                       if origin_of(u, "").startswith("pointer:"))
+                                   / max(1, n), 3),
+            "top_publisher_share": top_share}
 
 
 def figure_queries(figure, entity):

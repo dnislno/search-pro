@@ -182,6 +182,8 @@ Module-level usage (`scripts/rerank.py`, `scripts/verify-citations.py`) and the
 | `SEARCH_QUERY_EXPANSION` | No | Set `1` to enable LLM query expansion (same as `--expand-queries`) | off |
 | `RERANK_MIN_SCORE` | No | Drop rerank candidates below this score (0 = off) | `0` |
 | `SEARCH_MAX_LOOPS` | No | Override default agentic loops per mode | per-mode default |
+| `FETCH_RENDER` | No | Set `1` to enable optional local renderer (crawl4ai) as last resort before `js-empty`; needs lib installed | `0` |
+| `FETCH_RENDER_TIMEOUT` | No | Renderer timeout in seconds | `40` |
 
 Secrets live in the environment only. The repository is secret-scanned before
 every commit; no key has ever been committed (verified in CI-equivalent local gate).

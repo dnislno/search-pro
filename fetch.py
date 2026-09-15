@@ -11,7 +11,7 @@ from html.parser import HTMLParser
 
 UA = {"User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                      "AppleWebKit/537.36 (KHTML, like Gecko) "
-                      "Chrome/126.0 Safari/537.36 search-pro/2.5.0")}
+                      "Chrome/126.0 Safari/537.36 search-pro/2.6.0")}
 TIMEOUT = 25
 MAX_BYTES = 2_000_000
 MAX_CHARS = 20_000
@@ -75,12 +75,45 @@ def fetch(url: str) -> dict:
                                "text": "paywall/challenge marker found"})
     text = html_to_text(raw)
     if len(text) < 300 and any(m in raw for m in JS_MARKS):
+        rendered = _render_fallback(url)
+        if rendered:
+            return {"url": url, "status": "ok",
+                    "text": rendered[:MAX_CHARS], "via": "render"}
         return _fallback(url, {"url": url, "status": "js-empty",
                                "text": "client-rendered shell, no readable text"})
     if not text.strip():
         return _fallback(url, {"url": url, "status": "error",
                                "text": "empty after parsing"})
     return {"url": url, "status": "ok", "text": text[:MAX_CHARS], "via": "direct"}
+
+
+def _render_fallback(url):
+    """v2.6 3.3: optional local renderer as last resort before js-empty.
+
+    Only active with FETCH_RENDER=1 AND an installed renderer (crawl4ai).
+    Zero-deps by default: missing lib -> None (previous behavior kept).
+    Any renderer failure -> None (never faked, never raised)."""
+    import os
+    if os.environ.get("FETCH_RENDER", "0") != "1":
+        return None
+    try:
+        from crawl4ai import AsyncWebCrawler
+    except ImportError:
+        return None
+    try:
+        import asyncio
+        timeout = float(os.environ.get("FETCH_RENDER_TIMEOUT", "40"))
+
+        async def _go():
+            async with AsyncWebCrawler() as crawler:
+                res = await crawler.arun(url=url)
+                return (getattr(res, "markdown", "") or "").strip()
+
+        text = asyncio.run(asyncio.wait_for(_go(), timeout))
+        text = re.sub(r"\s+", " ", text or "").strip()
+        return text if len(text) >= 300 else None
+    except Exception:
+        return None
 
 
 def _fallback(url, first):

@@ -21,7 +21,7 @@ import providers
 from fetch import fetch
 import synthesize
 
-VERSION = "2.5.0"
+VERSION = "2.6.0"
 
 BUDGETS = {
     "best": {"queries": 4, "per_query": 5, "fetch": 4},
@@ -217,7 +217,8 @@ def synthesize_stage(query, evidence, method, a):
             body = synthesize.llm_rewrite(
                 query, evidence, provider=a.llm_provider,
                 model=a.llm_model or None,
-                reasoning_effort=a.reasoning_effort or None)
+                reasoning_effort=a.reasoning_effort or None,
+                style=("structured" if a.mode == "research" else "default"))
             claims = synthesize.attribute_claims(body, evidence)
             log(f"synthesized via llm: {len(claims)} attributed claims")
             return [body], claims
@@ -484,6 +485,18 @@ def main():
         if conflicts:
             log(f"conflicting reports: {len(conflicts)} unit(s)")
 
+        # 7d. source authority & diversity (v2.6 3.2)
+        try:
+            from corroborate import diversity_report as _div
+            diversity = _div([e.get("url", "") for e in evidence])
+        except ImportError:
+            diversity = {"n_sources": len(evidence), "n_publishers": 0,
+                         "authority": {}, "authority_mean": 0.0,
+                         "pointer_ratio": 0.0, "top_publisher_share": 0.0}
+        log(f"diversity: {diversity['n_publishers']} publishers, "
+            f"authority_mean={diversity['authority_mean']}, "
+            f"top_share={diversity['top_publisher_share']}")
+
         # 8. compose
         lines = [f"## Answer — {a.query or 'dry-run'}", ""]
         lines += [bl for bl in bullets
@@ -511,6 +524,10 @@ def main():
                   f"provider={a.provider} queries={len(queries)} "
                   f"fetched={len(evidence)} verified={verdict['stats'].get('verified', len(verdict['verified']))}/{len(claims)} "
                   f"demoted={n_demoted} rerank={rerank_method} loops={loops_used} "
+                  f"auth={diversity['authority'].get('primary', 0)}/"
+                  f"{diversity['authority'].get('secondary', 0)}/"
+                  f"{diversity['authority'].get('derivative', 0)} "
+                  f"pubs={diversity['n_publishers']} "
                   f"pass_rate={verdict['stats']['pass_rate']} elapsed={dt:.1f}s "
                   f"{t0.isoformat()}"]
         out = "\n".join(lines)
@@ -529,7 +546,7 @@ def main():
                 "queries_used": queries, "n_candidates": len(cands),
                 "rerank_method": rerank_method, "demoted": n_demoted,
                 "loops_used": loops_used, "followups": followups_all,
-                "n_conflicts": len(conflicts),
+                "n_conflicts": len(conflicts), "diversity": diversity,
                 "ranked": [{"url": c["url"], "score": c.get("_score"),
                             "method": c.get("_method")} for c in ranked],
                 "fetched": ([{"url": c["url"], "status": fetched.get(c["url"]),

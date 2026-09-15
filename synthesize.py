@@ -269,9 +269,27 @@ def llm_expand_queries(query, n=4, provider="auto", model=None):
     return out[:n]
 
 
+STRUCTURED_SYS = (
+    "Rewrite the evidence as a cited answer in the user's language, using "
+    "ONLY the evidence. Keep every [[n]](url) marker attached to its claim. "
+    "No new numbers, dates, or quotes beyond the evidence. "
+    "Structure the answer with these sections: "
+    "1) Key findings (2-5 bullets). 2) Numbers with sources (each number "
+    "keeps its marker). 3) Conflicts / uncertainties (rival figures side by "
+    "side, never averaged). 4) What is still unknown (max 3 bullets).")
+
+DEFAULT_SYS = ("Rewrite the evidence as a concise cited answer in the user's language. "
+               "Use ONLY the evidence. Keep every [[n]](url) marker attached to its claim. "
+               "No new numbers, dates, or quotes beyond the evidence.")
+
+
 def llm_rewrite(query, evidence, provider="auto", model=None,
-               reasoning_effort=None):
-    """Rewrite extractive bullets fluently. Keeps [[n]](url) markers."""
+               reasoning_effort=None, style=None):
+    """Rewrite extractive bullets fluently. Keeps [[n]](url) markers.
+
+    style: None/"default" (concise) or "structured" (v2.6 3.4: Key
+    findings / Numbers / Conflicts / Unknowns — used for research mode).
+    """
     if provider == "auto":
         provider = ("anthropic" if os.environ.get("ANTHROPIC_API_KEY")
                     else "openai" if os.environ.get("OPENAI_API_KEY")
@@ -287,9 +305,7 @@ def llm_rewrite(query, evidence, provider="auto", model=None,
         for e in evidence), int(os.environ.get(
             "OPENROUTER_MAX_EVIDENCE_CHARS",
             str(OPENROUTER_MAX_EVIDENCE_CHARS))))
-    sys = ("Rewrite the evidence as a concise cited answer in the user's language. "
-           "Use ONLY the evidence. Keep every [[n]](url) marker attached to its claim. "
-           "No new numbers, dates, or quotes beyond the evidence.")
+    sys = STRUCTURED_SYS if style == "structured" else DEFAULT_SYS
     if provider == "anthropic":
         d = _post_json("https://api.anthropic.com/v1/messages",
             {"model": "claude-sonnet-4-6", "max_tokens": 1500,

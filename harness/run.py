@@ -55,6 +55,11 @@ def main():
                 "fetched_ok": sum(1 for f in s.get("fetched", [])
                                   if f.get("status") == "ok"),
                 "fetched_n": len(s.get("fetched", [])),
+                # v2.6 3.5: adaptive-behavior + diversity signals (additive).
+                "loops": s.get("loops_used", 1),
+                "demoted": s.get("demoted", 0),
+                "conflicts": s.get("n_conflicts", 0),
+                "pubs": (s.get("diversity", {}) or {}).get("n_publishers", 0),
             })
         else:
             row["stderr"] = (p.stderr or "")[:2000]
@@ -80,6 +85,11 @@ def main():
         "M3_median_verified": med[len(med) // 2] if med else 0,
         "M3_frac_ge6": round(sum(1 for r in done if r["verified"] >= 6)
                              / max(1, len(done)), 3),
+        "M4_mean_loops": round(sum(r.get("loops", 1) for r in done)
+                               / max(1, len(done)), 3),
+        "M5_mean_publishers": round(sum(r.get("pubs", 0) for r in done)
+                                    / max(1, len(done)), 3),
+        "M5_conflict_runs": sum(1 for r in done if r.get("conflicts", 0)),
         "baselines": {"haus_grep": 0.659, "haus_readable": 0.787},
         "targets": {"M1": 0.85, "M2": 0.98, "M3_median": 6},
         "rows": rows,
@@ -88,7 +98,9 @@ def main():
                            encoding="utf-8"), ensure_ascii=False, indent=2)
     print(json.dumps({k: report[k] for k in
                       ("completed", "M1_grep_pass", "M2_link_live",
-                       "M3_median_verified", "M3_frac_ge6")}, indent=2))
+                       "M3_median_verified", "M3_frac_ge6",
+                       "M4_mean_loops", "M5_mean_publishers",
+                       "M5_conflict_runs")}, indent=2))
 
 
 if __name__ == "__main__":
