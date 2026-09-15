@@ -108,7 +108,10 @@ def _fallback(url, first):
             pass
     try:
         time.sleep(float(os.environ.get("JINA_GAP", "3")))
-        req = urllib.request.Request("https://r.jina.ai/" + url, headers=UA)
+        jh = dict(UA)
+        if os.environ.get("JINA_API_KEY"):  # keyed: higher limits, no IP block
+            jh["Authorization"] = "Bearer " + os.environ["JINA_API_KEY"]
+        req = urllib.request.Request("https://r.jina.ai/" + url, headers=jh)
         with urllib.request.urlopen(req, timeout=45) as r:
             body = r.read(MAX_BYTES).decode("utf-8", "ignore")
         lines = [ln for ln in body.splitlines()

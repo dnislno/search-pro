@@ -44,7 +44,9 @@ def norm_fig(fig):
 def extract_figures(text, limit=6):
     pats = re.findall(
         r"\$\s?\d[\d.,]*\s?(?:million|billion|m\b|b\b)?"
-        r"|\d[\d.,]*\s?(?:%|percent|million|billion|miliar|juta|km|mAh|kg|triliun)"
+        r"|\d[\d.,]*\s?(?:%|percent|million|billion|miliar|juta|km|mAh|kg|triliun|"
+        r"second(?:s)?|detik|minute(?:s)?|menit|hour(?:s)?|jam|point(?:s)?|poin|"
+        r"vote(?:s)?|suara|goal(?:s)?|gol|match(?:es)?)"
         r"|\b\d{3,}(?:[\d.,]*\d)?\b", text or "", flags=re.I)
     out, seen = [], set()
     for p in pats:

@@ -176,6 +176,7 @@ def main():
             bullets, claims = synthesize.extractive(a.query or "dry-run", evidence)
 
         # 7. verify (existing tested script)
+        claim_file = {cl["id"]: cl.get("file", "") for cl in claims}
         idmap = {cl["id"]: cl.pop("file", "") for cl in claims if "file" in cl}
         qj = os.path.join(tmp, "claims.json")
         json.dump(claims, open(qj, "w", encoding="utf-8"), ensure_ascii=False)
@@ -187,6 +188,40 @@ def main():
             vcmd += ["--map", mj]
         verdict = json.loads(run(vcmd)) if claims else {
             "verified": [], "unverified": [], "stats": {"pass_rate": 0}}
+
+        # 7b. corroboration gate (wired from v2.2.0 experiment): claims whose
+        # only backing is a pointer source (social/forums) need an independent
+        # verbatim backing in a non-pointer file, else demoted. Fixes study P2.
+        try:
+            from corroborate import (origin_of as _org,
+                                     body_has_figure as _bhf,
+                                     norm_fig as _nf,
+                                     extract_figures as _xf)
+        except ImportError:
+            _org = None
+        if _org is not None and verdict.get("verified"):
+            f2u = {e["file"]: e["url"] for e in evidence}
+            bodies = {fn: open(os.path.join(corpus, fn), encoding="utf-8").read()
+                      for fn in os.listdir(corpus) if fn.endswith(".md")}
+            keep, drop = [], []
+            for v in verdict["verified"]:
+                own_fn = claim_file.get(v["id"], "")
+                if _org(f2u.get(own_fn, ""), "").startswith("pointer:"):
+                    figs = {_nf(m) for m in _xf(v.get("text", ""))} - {""}
+                    backed = any(
+                        not _org(f2u.get(fn, ""), "").startswith("pointer:")
+                        and any(_bhf(txt, n) for n in figs)
+                        for fn, txt in bodies.items() if fn != own_fn)
+                    if not backed:
+                        v["gate"] = "demoted:pointer-without-backing"
+                        drop.append(v)
+                        continue
+                keep.append(v)
+            verdict["verified"] = keep
+            verdict["unverified"] = drop + verdict.get("unverified", [])
+            verdict["stats"] = {"n": len(claims), "verified": len(keep),
+                                "unverified": len(verdict["unverified"]),
+                                "pass_rate": round(len(keep) / max(1, len(claims)), 3)}
 
         # 8. compose
         ok_ids = {v.get("text") for v in verdict["verified"]}
