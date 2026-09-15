@@ -21,7 +21,7 @@ import providers
 from fetch import fetch
 import synthesize
 
-VERSION = "2.6.0"
+VERSION = "2.6.1"
 
 BUDGETS = {
     "best": {"queries": 4, "per_query": 5, "fetch": 4},
@@ -253,6 +253,7 @@ def apply_gate(verdict, claims, evidence, corpus):
                                  norm_fig as _nf, extract_figures as _xf)
     except ImportError:
         return verdict, 0
+    import re as _re
     n_demoted = 0
     if not verdict.get("verified"):
         return verdict, 0
@@ -264,7 +265,11 @@ def apply_gate(verdict, claims, evidence, corpus):
     for v in verdict["verified"]:
         own_fn = claim_file.get(v["id"], "")
         if _org(f2u.get(own_fn, ""), "").startswith("pointer:"):
-            figs = {_nf(m) for m in _xf(v.get("text", ""))} - {""}
+            # v2.6.1: bare years are not backing. A year (2026) appearing in
+            # another body says nothing about the pointer's figure (2,5 detik),
+            # so year norms are excluded before the independence check.
+            figs = {_nf(m) for m in _xf(v.get("text", ""))
+                    if not _re.fullmatch(r"(19|20)\d{2}", _nf(m))} - {""}
             backed = any(
                 not _org(f2u.get(fn, ""), "").startswith("pointer:")
                 and any(_bhf(txt, x) for x in figs)

@@ -142,6 +142,7 @@ is a tracked roadmap item, not a claimed result.
 | [v2.4.0](https://github.com/dnislno/search-pro/releases/tag/v2.4.0) | Planner fills budgets best 4 / pro 8 / research 12 (intent + site bias, zero-deps); marker-aware LLM attribution so the gate fires; auto-BGE on pro/research | Budgets hold across 6 query shapes, 0 dups; attribution checked on both paths |
 | [v2.5.0](https://github.com/dnislno/search-pro/releases/tag/v2.5.0) | Agentic-light loop (defaults 0/1/2, early-stop on ≥8 verified & <25% unverified); evidence scoring + top-5 chunks; Conflicting-reports section | Thin pass 4→8 verified across loops; saturated pass stops at loop 1; nothing-new stops |
 | [v2.6.0](https://github.com/dnislno/search-pro/releases/tag/v2.6.0) | Authority tiers + diversity report (provenance + run-json); structured research synthesis; opt-in renderer stub; harness M4/M5 | Tier/diversity math unit-checked; renderer provably inert by default |
+| [v2.6.1](https://github.com/dnislno/search-pro/releases/tag/v2.6.1) | Gate year-loophole closed (bare years no longer count as backing); conflict groups keyed by topic anchors | P2 probe: 3/3 pointer claims demote (was 1/3); kurs-vs-price no longer grouped; 8 pytest + 10 legacy green |
 
 What deliberately did **not** ship: self-hosted SearXNG, Exa/Brave as primary,
 and human-preference grading — infrastructure and judgment calls, not code
@@ -282,6 +283,8 @@ This repository is maintained to release-engineering standards, not demo standar
 | Agentic re-search loop | ✅ Shipped v2.5.0 (defaults 0/1/2, early-stop) |
 | Authority & diversity scoring | ✅ Shipped v2.6.0 (tiers + diversity report) |
 | Local renderer option (Crawl4AI-class) | ✅ Shipped v2.6.0 as opt-in stub (`FETCH_RENDER=1`) |
+| Corroboration gate year-figure loophole | ✅ Shipped v2.6.1 (years excluded from backing check) |
+| Conflict grouping by topic anchors | ✅ Shipped v2.6.1 (same-unit, different-context figures stay separate) |
 | Live harness re-run on v2.6 (M1–M5 incl. loops/diversity) | Planned (badges still reflect v2.3.0) |
 | Self-hosted SearXNG / Exa-Brave primary | Planned (infrastructure decision, not code) |
 | Human-preference grading vs frontier engines | Planned |

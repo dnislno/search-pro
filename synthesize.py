@@ -46,27 +46,71 @@ _CONFLICT_RE = re.compile(
     r"kg|km|mAh|rupiah|\brp\b|usd|\$|votes?|suara|points?|poin|seats?|kursi)",
     flags=re.I)
 
+# v2.6.1: month names never serve as topic anchors.
+_MONTHS = frozenset(
+    "januari februari maret april mei juni juli agustus september oktober "
+    "november desember jan feb mar apr may jun jul aug sep oct nov dec "
+    "january february march april june july august october".split())
+
+
+def _anchors(text):
+    """Proper-noun topic anchors: capitalized tokens excluding the sentence
+    opener and month names. Used to keep same-unit figures from unrelated
+    contexts (kurs vs harga) out of one conflict group."""
+    toks = re.findall(r"[A-Za-z][A-Za-z0-9.]*", text or "")
+    out = set()
+    for i, t in enumerate(toks):
+        if i == 0 or len(t) < 2:
+            continue
+        # Starts-uppercase (Meta, Jakarta) or camelCase brand (iPhone, eBay).
+        if not (t[0].isupper() or any(c.isupper() for c in t[1:])):
+            continue
+        low = t.lower().rstrip(".")
+        if low in _MONTHS:
+            continue
+        out.add(low)
+    return out
+
 
 def detect_conflicts(verified_claims, limit=5):
     """Group verified claims by unit; a unit with >=2 distinct normalized
-    values is a conflict (v2.5 2.3). Returns [{unit, values:[{value, text}]}].
-    stdlib only, heuristic by design — reviewers see both numbers."""
+    values is a conflict (v2.5 2.3). v2.6.1: values join one group only when
+    they share a topic anchor (or both sides are anchorless) -- rival figures
+    about different things (exchange rate vs phone price) stay separate.
+    Returns [{unit, values:[{value, text}]}]. stdlib only, heuristic by
+    design -- reviewers see both numbers."""
     groups = {}
     for cl in verified_claims or []:
         text = cl.get("text", "")
+        anchors = _anchors(text)
         for num, unit in _CONFLICT_RE.findall(text):
             norm = re.sub(r"\D", "", num)
             if not norm or re.fullmatch(r"(19|20)\d{2}", norm):
                 continue  # bare years are never rivals
             key = unit.lower().replace("$", "usd")
             slot = groups.setdefault(key, {})
-            slot.setdefault(norm, text)
+            prev = slot.get(norm)
+            if prev is None:
+                slot[norm] = (text, anchors)
+            else:
+                slot[norm] = (prev[0], prev[1] | anchors)
     out = []
     for unit, vals in groups.items():
-        if len(vals) >= 2:
+        items = list(vals.items())
+        rivals = []
+        for i, (norm_i, (text_i, anch_i)) in enumerate(items):
+            for norm_j, (text_j, anch_j) in items[i + 1:]:
+                if norm_i == norm_j:
+                    continue
+                if (anch_i & anch_j) or (not anch_i and not anch_j):
+                    if norm_i not in [v for v, _ in rivals]:
+                        rivals.append((norm_i, text_i))
+                    if norm_j not in [v for v, _ in rivals]:
+                        rivals.append((norm_j, text_j))
+        if rivals:
             out.append({"unit": unit,
                         "values": [{"value": v, "text": t}
-                                   for v, t in list(vals.items())[:3]]})
+                                   for v, t in rivals[:3]]})
         if len(out) >= limit:
             break
     return out
