@@ -25,14 +25,15 @@
 2. [Why teams switch](#2-why-teams-switch)
 3. [Architecture](#-architecture)
 4. [Measured performance](#-measured-performance)
-5. [Quickstart](#-quickstart)
-6. [Configuration](#-configuration)
-7. [CLI reference](#-cli-reference)
-8. [Project structure](#-project-structure)
-9. [Evaluation & governance](#-evaluation--governance)
-10. [Roadmap](#-roadmap)
-11. [Evidence: A/B study case](#-evidence-ab-study-case)
-12. [License](#license)
+5. [Release highlights](#-release-highlights)
+6. [Quickstart](#-quickstart)
+7. [Configuration](#-configuration)
+8. [CLI reference](#-cli-reference)
+9. [Project structure](#-project-structure)
+10. [Evaluation & governance](#-evaluation--governance)
+11. [Roadmap](#-roadmap)
+12. [Evidence: A/B study case](#-evidence-ab-study-case)
+13. [License](#license)
 
 ---
 
@@ -128,7 +129,27 @@ reordering), residual paywalls, one gate branch unit-proven but unobserved live.
 
 ---
 
-## 5. Quickstart
+## 5. Release highlights
+
+v2.3.1 → v2.6.0: from hotfix to adaptive retrieval. Every line below is covered
+by an offline test or a mocked-provider run. Full disclosure: the live 30-query
+harness (badges at the top) still reflects v2.3.0 conditions — the v2.6 re-run
+is a tracked roadmap item, not a claimed result.
+
+| Release | What shipped | Proof |
+|---|---|---|
+| [v2.3.1](https://github.com/dnislno/search-pro/releases/tag/v2.3.1) | OpenRouter reasoning opt-in (default off); self-heal retry on reasoning 400s; per-call input truncation; upstream errors surfaced | 6-scenario mock suite green; 10/10 unit; dry-run exit 0 |
+| [v2.4.0](https://github.com/dnislno/search-pro/releases/tag/v2.4.0) | Planner fills budgets best 4 / pro 8 / research 12 (intent + site bias, zero-deps); marker-aware LLM attribution so the gate fires; auto-BGE on pro/research | Budgets hold across 6 query shapes, 0 dups; attribution checked on both paths |
+| [v2.5.0](https://github.com/dnislno/search-pro/releases/tag/v2.5.0) | Agentic-light loop (defaults 0/1/2, early-stop on ≥8 verified & <25% unverified); evidence scoring + top-5 chunks; Conflicting-reports section | Thin pass 4→8 verified across loops; saturated pass stops at loop 1; nothing-new stops |
+| [v2.6.0](https://github.com/dnislno/search-pro/releases/tag/v2.6.0) | Authority tiers + diversity report (provenance + run-json); structured research synthesis; opt-in renderer stub; harness M4/M5 | Tier/diversity math unit-checked; renderer provably inert by default |
+
+What deliberately did **not** ship: self-hosted SearXNG, Exa/Brave as primary,
+and human-preference grading — infrastructure and judgment calls, not code
+defects. They stay open below.
+
+---
+
+## 6. Quickstart
 
 **Zero-key demo** (offline fixtures, full pipeline, ~1 second):
 
@@ -166,7 +187,7 @@ Module-level usage (`scripts/rerank.py`, `scripts/verify-citations.py`) and the
 
 ---
 
-## 6. Configuration
+## 7. Configuration
 
 | Variable | Required | Purpose | Default |
 |---|---|---|---|
@@ -190,7 +211,7 @@ every commit; no key has ever been committed (verified in CI-equivalent local ga
 
 ---
 
-## 7. CLI reference
+## 8. CLI reference
 
 ```
 python search.py --query "..." [--mode best|pro|research] [--provider auto|searxng|exa]
@@ -213,7 +234,7 @@ python search.py --query "..." [--mode best|pro|research] [--provider auto|searx
 
 ---
 
-## 8. Project structure
+## 9. Project structure
 
 ```
 search-pro/
@@ -236,7 +257,7 @@ search-pro/
 
 ---
 
-## 9. Evaluation & governance
+## 10. Evaluation & governance
 
 This repository is maintained to release-engineering standards, not demo standards:
 
@@ -251,20 +272,25 @@ This repository is maintained to release-engineering standards, not demo standar
 
 ---
 
-## 10. Roadmap
+## 11. Roadmap
 
 | Item | Status |
 |---|---|
-| BGE relevance gate on retrieval pools | Planned (fixes off-locale pools) |
-| Wire corroboration gate into `--synth llm` attribution path | Planned (unit-proven, unobserved live) |
-| Pro/research query-budget utilization (6 → 8/12 variants) | Defect logged, fix deferred post-benchmark |
+| BGE relevance gate on retrieval pools | ✅ Shipped v2.4.0 (auto-ON pro/research, heuristic fallback) |
+| Wire corroboration gate into `--synth llm` attribution path | ✅ Shipped v2.4.0 (marker-aware attribution) |
+| Pro/research query-budget utilization (6 → 8/12 variants) | ✅ Shipped v2.4.0 (budgets always filled) |
+| Agentic re-search loop | ✅ Shipped v2.5.0 (defaults 0/1/2, early-stop) |
+| Authority & diversity scoring | ✅ Shipped v2.6.0 (tiers + diversity report) |
+| Local renderer option (Crawl4AI-class) | ✅ Shipped v2.6.0 as opt-in stub (`FETCH_RENDER=1`) |
+| Live harness re-run on v2.6 (M1–M5 incl. loops/diversity) | Planned (badges still reflect v2.3.0) |
+| Self-hosted SearXNG / Exa-Brave primary | Planned (infrastructure decision, not code) |
+| Human-preference grading vs frontier engines | Planned |
 | Academic / code / video verticals | Planned |
 | OpenAI-compatible `/search` HTTP API | Planned |
-| Local renderer option (Crawl4AI-class) | Researching |
 
 ---
 
-## 11. Evidence: A/B study case
+## 12. Evidence: A/B study case
 
 Everyone claims "Perplexity alternative." We brought receipts — measured with the
 same ruler independent researchers used on Perplexity Pro, with every transcript
