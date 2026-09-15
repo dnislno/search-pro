@@ -21,7 +21,7 @@ import providers
 from fetch import fetch
 import synthesize
 
-VERSION = "2.3.1"
+VERSION = "2.4.0"
 
 BUDGETS = {
     "best": {"queries": 4, "per_query": 5, "fetch": 4},
@@ -29,19 +29,101 @@ BUDGETS = {
     "research": {"queries": 12, "per_query": 8, "fetch": 10},
 }
 
+_ID_MARKERS = frozenset(
+    "yang dan harga berapa jumlah daftar terbaru penduduk rupiah indonesia "
+    "vs tren".split())
 
-def plan_queries(query, mode):
-    words = [w for w in query.split() if len(w) > 4]
-    key = " ".join(words[:4]) or query
-    variants = [
-        query,
-        f"{query} data statistics",
-        f'"{key}"',
-        f"{query} 2026",
-        f"{query} study OR paper OR report",
-        f"{query} site:go.id OR site:ac.id OR site:edu",
-    ]
-    return variants[:BUDGETS[mode]["queries"]]
+
+def log(msg):
+    print(f"[search-pro] {msg}", file=sys.stderr)
+
+
+def detect_intent(query):
+    """Rule-based intent flags driving query planning (v2.4 1.1)."""
+    import re as _re
+    q = (query or "").lower()
+    return {
+        "is_compare": bool(_re.search(
+            r"\b(vs|versus|bandingkan|dibanding|perbandingan|compar\w*)\b", q)),
+        "is_numeric": bool(_re.search(
+            r"\b(berapa|harga|jumlah|total|ukuran|size|price|cost|fine|denda|"
+            r"statistic|data|angka|persen|percent)\b", q)),
+        "is_fresh": bool(_re.search(
+            r"\b(terbaru|latest|update|sekarang|current|202[5-9])\b", q)),
+        "is_academic": bool(_re.search(
+            r"\b(paper|studi|penelitian|jurnal|research|study|thesis)\b", q)),
+        "lang": "id" if set(q.split()) & _ID_MARKERS else "en",
+    }
+
+
+def plan_queries(query, mode, llm_expand_fn=None):
+    """Build up to BUDGETS[mode]['queries'] variants (v2.4 1.1).
+
+    Rule-based core always fills the budget (zero-deps); llm_expand_fn, when
+    given, supplies extra smart variants for remaining slots.
+    """
+    import re as _re
+    budget = BUDGETS[mode]["queries"]
+    intent = detect_intent(query)
+    year = str(datetime.datetime.now().year)
+    variants = [query]
+    important = _re.findall(r"[A-Za-z0-9]{4,}", query or "")
+    important = [w for w in important if len(w) > 4][:5]
+    if important:
+        variants.append(f'"{" ".join(important[:3])}"')
+    variants.append(f"{query} {year}")
+    variants.append(f"{query} {int(year) - 1}")
+    if important:
+        variants.append(f'"{" ".join(important[:3])}" {year}')
+    if intent["is_numeric"]:
+        variants.append(f"{query} data OR statistics OR angka OR jumlah")
+        variants.append(f"{query} official OR report OR laporan")
+    else:
+        variants.append(f"{query} statistics OR data")
+    if intent["is_compare"]:
+        variants.append(f"{query} comparison OR vs OR perbedaan")
+    if intent["is_academic"]:
+        variants.append(f"{query} study OR paper OR research OR jurnal")
+    if intent["is_fresh"]:
+        variants.append(f"{query} after:{int(year) - 1}")
+    if intent["lang"] == "id":
+        variants.append(f"{query} site:go.id OR site:ac.id OR site:edu")
+        variants.append(f"{query} site:go.id")
+        variants.append(f"{query} site:bps.go.id OR site:kemenkeu.go.id OR site:bi.go.id")
+    else:
+        variants.append(f"{query} site:gov OR site:edu OR site:org")
+        variants.append(f"{query} site:gov")
+        variants.append(f"{query} official report")
+    variants.append(f"{query} terbaru OR latest OR update")
+    # Generic fillers so the budget is always honored zero-deps (LLM
+    # expansion only replaces/augments these when explicitly enabled).
+    variants.append(f"{query} filetype:pdf OR pdf")
+    variants.append(f"{query} explained OR analysis OR dibahas")
+    variants.append(f"{query} news OR berita OR kabar")
+    seen, clean = set(), []
+    for v in variants:
+        k = v.lower().strip()
+        if k not in seen:
+            seen.add(k)
+            clean.append(v)
+    # Last-resort padding: guarantees the budget for any non-empty query.
+    for suffix in ("overview", "faq", "wiki", "history OR sejarah",
+                   "definition OR definisi"):
+        if len(clean) >= budget:
+            break
+        cand = f"{query} {suffix}"
+        if cand.lower() not in seen:
+            seen.add(cand.lower())
+            clean.append(cand)
+    if llm_expand_fn is not None and len(clean) < budget:
+        try:
+            for e in llm_expand_fn(query, budget - len(clean)) or []:
+                if e.lower().strip() not in seen:
+                    seen.add(e.lower().strip())
+                    clean.append(e)
+        except Exception as e:
+            log(f"query expansion skipped: {e}")
+    return clean[:budget]
 
 
 def run(cmd):
@@ -69,6 +151,11 @@ def main():
                          "(max|xhigh|high|medium|low|minimal; default: off). "
                          "Also via OPENROUTER_REASONING_EFFORT env")
     ap.add_argument("--advanced", action="store_true", help="BGE cross-encoder rerank")
+    ap.add_argument("--no-advanced", action="store_true",
+                    help="force heuristic rerank (overrides auto-BGE on pro/research)")
+    ap.add_argument("--expand-queries", action="store_true",
+                    help="opt-in LLM query expansion for leftover budget slots "
+                         "(also via SEARCH_QUERY_EXPANSION=1; needs LLM key)")
     ap.add_argument("--top-k", type=int, default=0, help="override fetch budget")
     ap.add_argument("--out", default="", help="write markdown answer to file")
     ap.add_argument("--run-json", default="",
@@ -97,7 +184,14 @@ def main():
             open(os.path.join(corpus, "doc0.md"), "w", encoding="utf-8").write(
                 open(shutil_corpus, encoding="utf-8").read())
         else:
-            queries = plan_queries(a.query, a.mode)
+            expand_fn = None
+            if a.expand_queries or os.environ.get("SEARCH_QUERY_EXPANSION") == "1":
+                def expand_fn(q, n, _a=a):
+                    return synthesize.llm_expand_queries(
+                        q, n, provider=_a.llm_provider,
+                        model=_a.llm_model or None)
+            queries = plan_queries(a.query, a.mode, llm_expand_fn=expand_fn)
+            log(f"planned {len(queries)} queries (mode={a.mode})")
             cands, vias = [], {}
             gap = float(os.environ.get("SEARCH_GAP", "1.0"))
             for i, q in enumerate(queries):
@@ -110,16 +204,23 @@ def main():
                     return 2
                 if gap and i < len(queries) - 1:
                     __import__("time").sleep(gap)
+            log(f"fan-out done: {len(cands)} candidates")
 
         # 3. rerank (existing tested script)
         cj = os.path.join(tmp, "candidates.json")
         json.dump(cands, open(cj, "w", encoding="utf-8"), ensure_ascii=False)
+        # v2.4 1.3: BGE cross-encoder is default on pro/research (falls back
+        # to heuristic inside rerank.py when `rerankers` isn't installed).
+        use_advanced = (a.advanced or a.mode in ("pro", "research")) \
+            and not a.no_advanced
         cmd = [sys.executable, os.path.join(HERE, "scripts", "rerank.py"),
                "--input", cj, "--query", a.query or "dry-run",
                "--top-k", str(fetch_n)]
-        if a.advanced:
+        if use_advanced:
             cmd.append("--advanced")
         ranked = json.loads(run(cmd))
+        rerank_method = (ranked[0].get("_method", "?") if ranked else "?")
+        log(f"reranked: {len(ranked)} kept via {rerank_method}")
 
         # 4. fetch
         if not a.dry_run:
@@ -131,6 +232,8 @@ def main():
                 if r["status"] == "ok":
                     open(os.path.join(corpus, f"doc{i}.md"), "w",
                          encoding="utf-8").write(f"# {c.get('title','')}\n{r['text']}")
+            nok = sum(1 for v in fetched.values() if v == "ok")
+            log(f"fetched: {nok}/{len(ranked)} ok")
 
         # 5. evidence chunks (query-relevant sentences, deterministic)
         files = sorted(f for f in os.listdir(corpus) if f.endswith(".md"))
@@ -161,21 +264,11 @@ def main():
                     a.query, evidence, provider=a.llm_provider,
                     model=a.llm_model or None,
                     reasoning_effort=a.reasoning_effort or None)
-                bullets, claims = [body], []  # claims extracted below
-                import re as _re
-                for s in _re.split(r"(?<=[.!?])\s+", body):
-                    s = s.strip()
-                    if not s or not _re.search(r"\d", s):
-                        continue
-                    # strip markdown links so URL digits/labels can't
-                    # fragment claims or pollute the number check;
-                    # handles both [n](url) and [[n]](url)
-                    clean = _re.sub(r"!?\[(?:\[[^\]]*\]|[^\]]*)\]\([^)]*\)",
-                                    "", s).strip()
-                    if clean:
-                        claims.append({"id": f"c{len(claims)+1}", "text": clean,
-                                       "quote": " ".join(clean.split()[:25]),
-                                       "url": (evidence[0]["url"] if evidence else "")})
+                # v2.4 1.2: marker-aware attribution so every claim carries
+                # file+url and the corroboration gate below can fire.
+                claims = synthesize.attribute_claims(body, evidence)
+                bullets = [body]
+                log(f"synthesized via llm: {len(claims)} attributed claims")
             except RuntimeError as e:
                 print(f"error: {e}", file=sys.stderr)
                 return 2
@@ -199,6 +292,8 @@ def main():
         # 7b. corroboration gate (wired from v2.2.0 experiment): claims whose
         # only backing is a pointer source (social/forums) need an independent
         # verbatim backing in a non-pointer file, else demoted. Fixes study P2.
+        # v2.4 1.2: LLM-path claims now carry file attribution, so this fires.
+        n_demoted = 0
         try:
             from corroborate import (origin_of as _org,
                                      body_has_figure as _bhf,
@@ -226,9 +321,12 @@ def main():
                 keep.append(v)
             verdict["verified"] = keep
             verdict["unverified"] = drop + verdict.get("unverified", [])
+            n_demoted = len(drop)
             verdict["stats"] = {"n": len(claims), "verified": len(keep),
                                 "unverified": len(verdict["unverified"]),
                                 "pass_rate": round(len(keep) / max(1, len(claims)), 3)}
+        if n_demoted:
+            log(f"corroboration gate demoted {n_demoted} pointer-backed claim(s)")
 
         # 8. compose
         ok_ids = {v.get("text") for v in verdict["verified"]}
@@ -251,6 +349,7 @@ def main():
                   f"model=search-pro/{VERSION}+{method} mode={a.mode} "
                   f"provider={a.provider} queries={len(queries)} "
                   f"fetched={len(evidence)} verified={verdict['stats'].get('verified', len(verdict['verified']))}/{len(claims)} "
+                  f"demoted={n_demoted} rerank={rerank_method} "
                   f"pass_rate={verdict['stats']['pass_rate']} elapsed={dt:.1f}s "
                   f"{t0.isoformat()}"]
         out = "\n".join(lines)
@@ -265,7 +364,9 @@ def main():
             summary = {
                 "query": a.query or "dry-run", "mode": a.mode,
                 "provider": a.provider, "synth": method,
+                "version": VERSION,
                 "queries_used": queries, "n_candidates": len(cands),
+                "rerank_method": rerank_method, "demoted": n_demoted,
                 "ranked": [{"url": c["url"], "score": c.get("_score"),
                             "method": c.get("_method")} for c in ranked],
                 "fetched": ([{"url": c["url"], "status": fetched.get(c["url"]),

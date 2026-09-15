@@ -6,7 +6,7 @@ Usage:
 Input JSON: [{"title":..,"url":..,"snippet":..,"published":..}, ...]
 Output JSON to stdout: ranked top-k with _score and _method.
 """
-import argparse, json, re, sys
+import argparse, json, os, re, sys
 from collections import OrderedDict
 from urllib.parse import urlparse
 
@@ -82,6 +82,13 @@ def main():
             c["_score"] = heuristic_score(a.query, c)
 
     uniq.sort(key=lambda c: c.get("_score", 0), reverse=True)
+    # v2.4 1.3: optional score floor (env RERANK_MIN_SCORE, default 0 = off).
+    try:
+        min_score = float(os.environ.get("RERANK_MIN_SCORE", "0") or 0)
+    except ValueError:
+        min_score = 0.0
+    if min_score > 0:
+        uniq = [c for c in uniq if c.get("_score", 0) >= min_score]
     for c in uniq[:a.top_k]:
         c["_method"] = method
     try:

@@ -114,6 +114,118 @@ def _is_reasoning_error(msg):
         "was not issued", "must be passed back", "invalid_request_error"))
 
 
+MARKER_RE = re.compile(r"\[\[(\d+)\]\]\([^)]*\)|\[(\d+)\]\([^)]*\)")
+_MD_LINK_RE = re.compile(r"!?\[(?:\[[^\]]*\]|[^\]]*)\]\([^)]*\)")
+
+
+def _best_evidence(text, evidence):
+    """Fallback attribution: token overlap + figure match bonus."""
+    if not evidence:
+        return None
+    q = set(tokens(text))
+    q_figs = {re.sub(r"\D", "", m)
+              for m in re.findall(r"\d[\d.,]*", text or "")} - {""}
+    best, best_sc = None, -1.0
+    for ev in evidence:
+        doc = " ".join(ev.get("chunks", []))
+        t = set(tokens(doc))
+        overlap = len(q & t) / max(1, len(q))
+        d_figs = {re.sub(r"\D", "", m)
+                  for m in re.findall(r"\d[\d.,]*", doc)} - {""}
+        sc = overlap + (1.0 if q_figs & d_figs else 0.0)
+        if sc > best_sc:
+            best, best_sc = ev, sc
+    return best
+
+
+def attribute_claims(body, evidence):
+    """Map LLM rewrite sentences back to evidence files.
+
+    Marker-aware: a sentence carrying [[n]](url) is attributed to evidence n
+    (file+url), so the corroboration gate in search.py can fire. Sentences
+    without markers fall back to overlap attribution. Only sentences with
+    digits become claims (numbers/dates/quotes are what the verifier checks).
+    """
+    by_n = {e.get("n"): e for e in (evidence or [])}
+    claims = []
+    for s in SENT_SPLIT.split(body or ""):
+        s = s.strip()
+        if not s or not re.search(r"\d", s):
+            continue
+        markers = [int(a or b) for a, b in MARKER_RE.findall(s)]
+        clean = _MD_LINK_RE.sub("", s).strip()
+        if not clean:
+            continue
+        ev = next((by_n[m] for m in markers if m in by_n), None)
+        if ev is None:
+            ev = _best_evidence(clean, evidence)
+        if ev is None:
+            continue
+        claims.append({"id": f"c{len(claims) + 1}", "text": clean,
+                       "quote": " ".join(clean.split()[:25]),
+                       "url": ev.get("url", ""),
+                       "file": ev.get("file", "")})
+    return claims
+
+
+def llm_expand_queries(query, n=4, provider="auto", model=None):
+    """Generate up to n extra search-query variants. Opt-in only (v2.4 1.1):
+    called only when the caller enables query expansion AND an LLM key exists.
+    Returns a list of plain query strings (may be shorter than n)."""
+    if provider == "auto":
+        provider = ("anthropic" if os.environ.get("ANTHROPIC_API_KEY")
+                    else "openai" if os.environ.get("OPENAI_API_KEY")
+                    else "openrouter" if os.environ.get("OPENROUTER_API_KEY")
+                    else None)
+    if provider is None:
+        raise RuntimeError("No LLM key for query expansion")
+    q = _truncate(query, 500)
+    prompt = (f"Generate exactly {n} diverse web search queries that would "
+              f"help answer: {q}\nRules: one query per line, no numbering, "
+              f"no quotes around the whole line, no explanations.")
+    lines = []
+    if provider == "anthropic":
+        d = _post_json("https://api.anthropic.com/v1/messages",
+            {"model": "claude-sonnet-4-6", "max_tokens": 500,
+             "messages": [{"role": "user", "content": prompt}]},
+            {"Content-Type": "application/json",
+             "x-api-key": os.environ["ANTHROPIC_API_KEY"],
+             "anthropic-version": "2023-06-01"})
+        txt = "".join(b.get("text", "") for b in d.get("content", []))
+        lines = txt.splitlines()
+    else:
+        if provider == "openrouter":
+            url, model = ("https://openrouter.ai/api/v1/chat/completions",
+                          model or os.environ.get(
+                              "OPENROUTER_MODEL", OPENROUTER_DEFAULT_MODEL))
+            headers = {"Content-Type": "application/json",
+                       "Authorization": f"Bearer {os.environ['OPENROUTER_API_KEY']}",
+                       "HTTP-Referer": "https://github.com/dnislno/search-pro",
+                       "X-Title": "search-pro"}
+            payload = {"model": model, "max_tokens": 500,
+                       "messages": [{"role": "user", "content": prompt}]}
+        else:
+            url, headers = ("https://api.openai.com/v1/chat/completions",
+                            {"Content-Type": "application/json",
+                             "Authorization": f"Bearer {os.environ['OPENAI_API_KEY']}"})
+            payload = {"model": "gpt-5.2", "max_tokens": 500,
+                       "messages": [{"role": "user", "content": prompt}]}
+        try:
+            d = _post_json(url, payload, headers)
+            txt = d["choices"][0]["message"].get("content") or ""
+        except Exception as e:
+            raise RuntimeError(
+                f"Query expansion failed: {_upstream_message(e)}") from e
+        lines = (txt or "").splitlines()
+    out, seen = [], set()
+    for ln in lines:
+        ln = re.sub(r"^[\s\d\-.*]+", "", ln).strip().strip('"').strip()
+        if ln and ln.lower() not in seen:
+            seen.add(ln.lower())
+            out.append(ln)
+    return out[:n]
+
+
 def llm_rewrite(query, evidence, provider="auto", model=None,
                reasoning_effort=None):
     """Rewrite extractive bullets fluently. Keeps [[n]](url) markers."""

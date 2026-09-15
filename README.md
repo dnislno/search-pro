@@ -179,6 +179,8 @@ Module-level usage (`scripts/rerank.py`, `scripts/verify-citations.py`) and the
 | `OPENROUTER_MODEL` | No | Override synthesis model | `nex-agi/nex-n2.5-pro:free` |
 | `OPENROUTER_REASONING_EFFORT` | No | Opt-in reasoning effort (`max\|xhigh\|high\|medium\|low\|minimal`); unset = off (avoids `encrypted_content` upstream errors) | unset (off) |
 | `OPENROUTER_MAX_EVIDENCE_CHARS` / `OPENROUTER_MAX_QUERY_CHARS` | No | Truncate evidence/query per LLM call (large pastes trigger gateway failover) | `12000` / `2000` |
+| `SEARCH_QUERY_EXPANSION` | No | Set `1` to enable LLM query expansion (same as `--expand-queries`) | off |
+| `RERANK_MIN_SCORE` | No | Drop rerank candidates below this score (0 = off) | `0` |
 
 Secrets live in the environment only. The repository is secret-scanned before
 every commit; no key has ever been committed (verified in CI-equivalent local gate).
@@ -190,14 +192,18 @@ every commit; no key has ever been committed (verified in CI-equivalent local ga
 ```
 python search.py --query "..." [--mode best|pro|research] [--provider auto|searxng|exa]
                  [--synth auto|extractive|llm] [--llm-provider auto|anthropic|openai|openrouter]
-                 [--llm-model ID] [--advanced] [--top-k N] [--out FILE] [--run-json FILE] [--dry-run]
+                 [--llm-model ID] [--reasoning-effort EFFORT] [--advanced] [--no-advanced]
+                 [--expand-queries] [--top-k N] [--out FILE] [--run-json FILE] [--dry-run]
 ```
 
 | Flag | Effect |
 |---|---|
-| `--mode` | Budgets: best 4×5/4 · pro 8×6/8 · research 12×8/10 (queries × results / fetches) |
-| `--synth` | `extractive` (offline, deterministic) or `llm` (fluent, re-verified) |
-| `--advanced` | Local BGE cross-encoder rerank for finance/niche queries |
+| `--mode` | Budgets: best 4×5/4 · pro 8×6/8 · research 12×8/10 (queries × results / fetches); v2.4 query planner always fills the budget (intent-aware + site bias + fillers) |
+| `--synth` | `extractive` (offline, deterministic) or `llm` (fluent, re-verified, marker-attributed since v2.4) |
+| `--reasoning-effort` | Opt-in OpenRouter reasoning (`max\|xhigh\|high\|medium\|low\|minimal`); default off |
+| `--advanced` | Force BGE cross-encoder rerank (default auto-ON for pro/research since v2.4, heuristic fallback if `rerankers` missing) |
+| `--no-advanced` | Force heuristic rerank (overrides auto-BGE) |
+| `--expand-queries` | Opt-in LLM query expansion for leftover budget slots (needs LLM key) |
 | `--run-json` | Machine-readable summary (powers `harness/run.py`) |
 | Exit codes | `0` ok (even with Unverified section) · `2` config error · `1` runtime failure |
 
