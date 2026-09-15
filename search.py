@@ -21,7 +21,7 @@ import providers
 from fetch import fetch
 import synthesize
 
-VERSION = "2.6.1"
+VERSION = "2.6.2"
 
 BUDGETS = {
     "best": {"queries": 4, "per_query": 5, "fetch": 4},
@@ -402,6 +402,9 @@ def main():
                    "stats": {"pass_rate": 0}}
         n_demoted, rerank_method = 0, "?"
         followups_all, loops_used = [], 0
+        # v2.6.2: run-json accumulates across loops (queries, candidates,
+        # fetched) instead of reflecting only the last loop.
+        all_queries, n_candidates_total = [], 0
         gap = float(os.environ.get("SEARCH_GAP", "1.0"))
 
         for loop in range(max_loops + 1):
@@ -427,6 +430,8 @@ def main():
                 log(f"loop {loop}: follow-up queries: {queries}")
                 cands = fanout_search(
                     queries, a.provider, a.searxng_url, b["per_query"], gap)
+            all_queries += queries
+            n_candidates_total += len(cands)
 
             # 3. rerank
             if a.dry_run:
@@ -526,7 +531,7 @@ def main():
         dt = (datetime.datetime.now(datetime.timezone.utc) - t0).total_seconds()
         lines += ["", "## Provenance",
                   f"model=search-pro/{VERSION}+{method} mode={a.mode} "
-                  f"provider={a.provider} queries={len(queries)} "
+                  f"provider={a.provider} queries={len(all_queries)} "
                   f"fetched={len(evidence)} verified={verdict['stats'].get('verified', len(verdict['verified']))}/{len(claims)} "
                   f"demoted={n_demoted} rerank={rerank_method} loops={loops_used} "
                   f"auth={diversity['authority'].get('primary', 0)}/"
@@ -548,15 +553,21 @@ def main():
                 "query": a.query or "dry-run", "mode": a.mode,
                 "provider": a.provider, "synth": method,
                 "version": VERSION,
-                "queries_used": queries, "n_candidates": len(cands),
+                "queries_used": all_queries,
+                "n_candidates": n_candidates_total,
                 "rerank_method": rerank_method, "demoted": n_demoted,
                 "loops_used": loops_used, "followups": followups_all,
                 "n_conflicts": len(conflicts), "diversity": diversity,
                 "ranked": [{"url": c["url"], "score": c.get("_score"),
                             "method": c.get("_method")} for c in ranked],
-                "fetched": ([{"url": c["url"], "status": fetched.get(c["url"]),
-                               "via": vias.get(c["url"], "direct")}
-                              for c in ranked] if not a.dry_run else
+                # v2.6.2: every fetched URL across all loops, in fetch order
+                # (was: last loop's ranking only).
+                "fetched": ([{"url": u, "status": fetched.get(u),
+                               "via": vias.get(u, "direct")}
+                              for u in (list(url_to_file)
+                                        + [u for u in fetched
+                                           if u not in url_to_file])]
+                             if not a.dry_run else
                              [{"url": "fixture", "status": v, "via": "direct"}
                               for v in fetched.values()]),
                 "n_evidence": len(evidence),

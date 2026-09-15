@@ -103,3 +103,38 @@ def test_pick_prefers_figures():
             "Harga beras naik 5 persen menjadi 15000 rupiah per kilogram pada 2026 menurut data.")
     top = Z.pick_sentences("berapa harga beras 2026", text, k=1)
     assert any("15000" in s for s in top), top
+
+
+def test_run_json_accumulates_across_loops():
+    """v2.6.2: queries_used / n_candidates / fetched cover ALL loops."""
+    import io
+    import json
+    import tempfile
+    import contextlib
+    import search as S
+
+    out_json = os.path.join(tempfile.mkdtemp(prefix="looptest_"), "r.json")
+    sys.argv = ["search.py", "--query", "harga beras 2026", "--mode", "best",
+                "--synth", "extractive", "--max-loops", "1",
+                "--run-json", out_json]
+    os.environ["SEARCH_GAP"] = "0"
+    S.providers.search = lambda q, provider="auto", limit=5, searxng_url=None, **kw: [
+        {"title": f"D {abs(hash(q)) % 10000}-{i}",
+         "url": f"https://t.test/{abs(hash(q)) % 10000}-{i}",
+         "snippet": "x", "published": None} for i in range(limit)]
+    S.fetch = lambda url: {
+        "url": url, "status": "ok",
+        "text": "Harga beras tercatat sebesar 15000 rupiah per kilogram pada 2026 menurut data resmi yang dirilis kemarin.",
+        "via": "direct"}
+    with contextlib.redirect_stdout(io.StringIO()):
+        assert S.main() == 0
+    d = json.load(open(out_json, encoding="utf-8"))
+    assert d["loops_used"] == 2, d["loops_used"]
+    assert len(d["queries_used"]) == 4 + len(d["followups"]) > 4, d["queries_used"]
+    assert d["n_candidates"] == sum(
+        5 for _ in d["queries_used"]), d["n_candidates"]
+    fetched_urls = {f["url"] for f in d["fetched"]}
+    assert len(d["fetched"]) == d["n_evidence"] == 8, d["fetched"]
+    assert fetched_urls, "fetched list must cover all loops, not the last one"
+    assert all(f["status"] == "ok" for f in d["fetched"])
+    del os.environ["SEARCH_GAP"]

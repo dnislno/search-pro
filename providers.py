@@ -11,7 +11,7 @@ import os
 import urllib.parse
 import urllib.request
 
-UA = {"User-Agent": "search-pro/2.6.1 (+local CLI)"}
+UA = {"User-Agent": "search-pro/2.6.2 (+local CLI)"}
 TIMEOUT = 25
 
 _ID_MARKERS = frozenset(
