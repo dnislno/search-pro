@@ -29,12 +29,14 @@ User → Muse Spark Intent IR → Planner (≤4 steps) → Parallel web search
 1. **Translate intent** (`intent-ir.schema.json`) — Muse Spark 1.3 resolves pronouns, classifies `best | pro | research`, and emits 4–12 rewritten queries (`site:`, exact-phrase, recency).
 2. **Retrieve wide** — `scripts/rerank.py` dedups by normalized URL and scores candidates (Plan A heuristic, Plan B local BGE cross-encoder for finance/niche queries).
 3. **Verify hard** — `scripts/verify-citations.py` requires every numeric/date/quote claim to match the fetched body text (Haus-style deterministic check).
-4. **Synthesize honestly** — grounded-only generation with inline `[[n]](url)` citations, a `Conflicts` section when sources disagree, and three follow-up questions.
+4. **Synthesize honestly** — grounded-only generation with inline `[[n]](url)` citations and an `Unverified` section for anything unsupported (follow-ups + backfill loop on roadmap).
 
-## Measured behavior
+## Measured behavior (live harness, 30 queries, pro mode — see `harness/REPORT-v2.0.0.md`)
 
-- Typical `pro` run: ~10 verified claims against a ≥6 target ✅
-- Adversarial worst case (paywalled/JS-heavy niche): heuristic yields ~3 → auto-escalation to BGE cross-encoder restores ~7 ✅
+- Citation faithfulness: **453/453 claims verified (1.000)** vs 0.659 Haus baseline ✅
+- Source accessibility: **163/228 fetches ok (0.715)** vs 0.787 Haus — ❌ the known free-tier retrieval gap
+- Volume: **median 15 verified claims/answer, 28/30 ≥6** ✅
+- Verdict: parity **not yet claimed** — honest numbers above; rerun harness after provider upgrade.
 - Fixture-tested: true claim passes as `verified-full-read`, fabricated claim rejected as `unverified` (see `examples/`)
 
 ## Quickstart — one command, local
