@@ -2,9 +2,12 @@
 """search-pro CLI — one command, local, full pipeline.
   python search.py --query "..." --mode pro --provider searxng
   python search.py --query "..." --mode best --provider exa --synth llm
+  python search.py --query "harga beras 2026" --mode pro --provider hybrid
   python search.py --dry-run            # offline, uses examples/ fixtures
 Pipeline: plan -> fan-out search -> rerank -> fetch -> evidence ->
           synthesize -> verify -> cited markdown + provenance.
+Fan-out (v3.3.0 hybrid): loop 0 LangSearch broad discovery (bulk 10/query),
+loops >=1 Parallel MCP micro iteration (batched, excerpt evidence).
 Exit codes: 0 ok (even with Unverified section), 2 config error, 1 failure.
 """
 import argparse
@@ -21,7 +24,7 @@ import providers
 from fetch import fetch
 import synthesize
 
-VERSION = "3.2.0"
+VERSION = "3.3.0"
 
 BUDGETS = {
     "best": {"queries": 4, "per_query": 5, "fetch": 4},
@@ -146,11 +149,45 @@ MIN_VERIFIED_STOP = 8
 MAX_UNVERIFIED_RATIO_STOP = 0.25
 
 
-def fanout_search(queries, provider, searxng_url, per_query, gap):
+def fanout_search(queries, provider, searxng_url, per_query, gap,
+                  objective="", loop=0, mcp_state=None):
+    """Two-phase fan-out (v3.3.0 hybrid design):
+
+    - loop 0 / broad discovery: LangSearch bulk retrieval (count=10/query ->
+      puluhan kandidat sekaligus, best 40 / pro 80 / research 120).
+    - loops >=1 / micro iteration: Parallel MCP batched (3 queries/call,
+      excerpt evidence for granular verification).
+    - provider=hybrid selects the phase automatically; explicit
+      langsearch|parallel|searxng|exa force one backend for all loops.
+    - provider=auto prefers langsearch when LANGSEARCH_API_KEY is set.
+    """
+    eff = provider
+    if provider == "hybrid":
+        eff = "langsearch" if loop == 0 else "parallel"
+        log(f"hybrid loop {loop}: "
+            f"{'broad-discovery (langsearch x10)' if loop == 0 else 'micro-iteration (parallel batched)'}")
+    if eff == "parallel":
+        cands = []
+        st = mcp_state if mcp_state is not None else {}
+        for i in range(0, len(queries), 3):
+            batch = queries[i:i + 3]
+            try:
+                cands += providers.parallel_search(
+                    objective or (queries[0] if queries else ""),
+                    batch, limit=10, session_state=st)
+            except RuntimeError as e:
+                print(f"error: {e}", file=sys.stderr)
+                raise FatalConfigError(str(e)) from e
+            if gap and i + 3 < len(queries):
+                __import__("time").sleep(gap)
+        return cands
+    # per-query backends (auto resolves langsearch>exa>searxng in providers)
+    lim = 10 if (provider == "hybrid" and loop == 0) or eff == "langsearch" \
+        else per_query
     cands = []
     for i, q in enumerate(queries):
         try:
-            cands += providers.search(q, provider=provider, limit=per_query,
+            cands += providers.search(q, provider=eff, limit=lim,
                                       searxng_url=searxng_url)
         except RuntimeError as e:
             print(f"error: {e}", file=sys.stderr)
@@ -315,7 +352,8 @@ def main():
     ap = argparse.ArgumentParser(description="search-pro local CLI")
     ap.add_argument("--query", default="")
     ap.add_argument("--mode", choices=["best", "pro", "research"], default="pro")
-    ap.add_argument("--provider", choices=["auto", "searxng", "exa"], default="auto")
+    ap.add_argument("--provider", choices=["auto", "searxng", "exa", "langsearch", "parallel", "hybrid"], default="auto",
+                    help="retrieval backend; hybrid = langsearch broad-discovery (loop 0) + parallel micro-iteration (loops>=1)")
     ap.add_argument("--searxng-url", default=os.environ.get("SEARXNG_URL"))
     ap.add_argument("--synth", choices=["auto", "extractive", "llm"], default="auto")
     ap.add_argument("--llm-provider", choices=["auto", "anthropic", "openai", "openrouter"],
@@ -406,6 +444,7 @@ def main():
         # fetched) instead of reflecting only the last loop.
         all_queries, n_candidates_total = [], 0
         gap = float(os.environ.get("SEARCH_GAP", "1.0"))
+        mcp_state = {}  # v3.3.0: reused MCP session for hybrid micro loops
 
         for loop in range(max_loops + 1):
             loops_used = loop + 1
@@ -417,7 +456,8 @@ def main():
                 seen_queries.update(q.lower() for q in queries)
                 log(f"planned {len(queries)} queries (mode={a.mode})")
                 cands = fanout_search(
-                    queries, a.provider, a.searxng_url, b["per_query"], gap)
+                    queries, a.provider, a.searxng_url, b["per_query"], gap,
+                    objective=a.query, loop=0, mcp_state=mcp_state)
                 log(f"fan-out done: {len(cands)} candidates")
             else:
                 queries = generate_followups(a.query, verdict, intent,
@@ -429,7 +469,8 @@ def main():
                 followups_all += queries
                 log(f"loop {loop}: follow-up queries: {queries}")
                 cands = fanout_search(
-                    queries, a.provider, a.searxng_url, b["per_query"], gap)
+                    queries, a.provider, a.searxng_url, b["per_query"], gap,
+                    objective=a.query, loop=loop, mcp_state=mcp_state)
             all_queries += queries
             n_candidates_total += len(cands)
 

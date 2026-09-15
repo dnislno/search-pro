@@ -52,7 +52,7 @@ contract:
 |---|---|
 | **Category** | Self-hosted answer engine (Perplexity-class UX, audit-class guarantees) |
 | **Runtime** | Python 3.10+, standard library only for the core pipeline |
-| **Retrieval** | Pluggable providers (SearXNG, Exa) + reader fallback chain |
+| **Retrieval** | Pluggable providers (SearXNG, Exa, LangSearch bulk, Parallel MCP) + reader fallback chain |
 | **Synthesis** | Offline extractive default; optional LLM rewrite (Anthropic / OpenAI / OpenRouter), always re-verified |
 | **Guarantees** | Machine-checked per release (see [§4](#-measured-performance)) |
 
@@ -147,6 +147,7 @@ is a tracked roadmap item, not a claimed result.
 | [v3.0.0](https://github.com/dnislno/search-pro/releases/tag/v3.0.0) | Standalone web frontend (`search-pro.html`): full client-side pipeline, zero-install, keyless by default | 22/22 JS tests; Jina/Wikipedia/OpenRouter verified live; push protection enforced keyless |
 | [v3.1.0](https://github.com/dnislno/search-pro/releases/tag/v3.1.0) | Dead DuckDuckGo endpoint replaced with Brave Search (optional key field, graceful fallback) | Mapper + no-key unit tests; endpoint alive (422 on dummy); 24/24 JS green |
 | [v3.2.0](https://github.com/dnislno/search-pro/releases/tag/v3.2.0) | Brave replaced with Parallel Search MCP (free anonymous tier, excerpt evidence, batched queries) | Live anonymous web_search verified; 26/26 JS green; ACAO * confirmed |
+| [v3.3.0](https://github.com/dnislno/search-pro/releases/tag/v3.3.0) | Hybrid retrieval: LangSearch broad discovery (bulk 10/query → puluhan kandidat) + Parallel micro-iteration (excerpt, verifikasi granular); ringkasan LangSearch tak dihitung full-read | Live LangSearch 3/3 + hybrid best 4→40 kandidat, 19/19 verified; 17 pytest + 28/28 JS green |
 
 What deliberately did **not** ship: self-hosted SearXNG, Exa/Brave as primary,
 and human-preference grading — infrastructure and judgment calls, not code
@@ -174,6 +175,17 @@ $env:EXA_API_KEY = "exa-..."                 # alternative neural search
 python search.py --query "Perplexity vs ChatGPT accuracy" --mode best --provider exa
 ```
 
+```powershell
+$env:LANGSEARCH_API_KEY = "sk-..."           # broad-discovery bulk retrieval
+python search.py --query "harga beras 2026 per kilogram" --mode best --provider langsearch
+```
+
+```powershell
+# Hybrid (recommended): loop 0 LangSearch broad (puluhan kandidat) +
+# loops ≥1 Parallel micro-iteration (verifikasi granular)
+python search.py --query "harga beras 2026" --mode pro --provider hybrid
+```
+
 **Fluent rewrite** (always re-verified after generation):
 
 ```powershell
@@ -198,6 +210,8 @@ Module-level usage (`scripts/rerank.py`, `scripts/verify-citations.py`) and the
 |---|---|---|---|
 | `SEARXNG_URL` | Live search (unless Exa) | Instance URL; comma-separated = failover ring | — |
 | `EXA_API_KEY` | Exa provider | Neural search key from exa.ai | — |
+| `LANGSEARCH_API_KEY` | LangSearch / hybrid broad discovery | Bulk retrieval key from langsearch.com/dashboard; loop 0 pulls 10/query (best 40 / pro 80 / research 120) | — |
+| `PARALLEL_API_KEY` | Parallel micro-iteration (optional) | Anonymous tier works (lower limits); key lifts quota at platform.parallel.ai | anonymous |
 | `JINA_API_KEY` | Recommended | Lifts reader fallback from 20 RPM anonymous to keyed quota | anonymous |
 | `JINA_FALLBACK` | No | Set `0` to disable reader fallback | `1` |
 | `JINA_GAP` / `SEARCH_GAP` | No | Politeness delays (seconds) between remote calls | `3` / `1.0` |
@@ -219,7 +233,7 @@ every commit; no key has ever been committed (verified in CI-equivalent local ga
 ## 8. CLI reference
 
 ```
-python search.py --query "..." [--mode best|pro|research] [--provider auto|searxng|exa]
+python search.py --query "..." [--mode best|pro|research] [--provider auto|searxng|exa|langsearch|parallel|hybrid]
                  [--synth auto|extractive|llm] [--llm-provider auto|anthropic|openai|openrouter]
                  [--llm-model ID] [--reasoning-effort EFFORT] [--advanced] [--no-advanced]
                  [--expand-queries] [--max-loops N] [--top-k N] [--out FILE] [--run-json FILE] [--dry-run]
@@ -227,7 +241,8 @@ python search.py --query "..." [--mode best|pro|research] [--provider auto|searx
 
 | Flag | Effect |
 |---|---|
-| `--mode` | Budgets: best 4×5/4 · pro 8×6/8 · research 12×8/10 (queries × results / fetches); v2.4 query planner always fills the budget (intent-aware + site bias + fillers) |
+| `--mode` | Budgets: best 4×5/4 · pro 8×6/8 · research 12×8/10 (queries × results / fetches); hybrid/​langsearch loop 0 pulls 10/query (best 40 / pro 80 / research 120 bulk); v2.4 query planner always fills the budget (intent-aware + site bias + fillers) |
+| `--provider` | `auto` (langsearch → exa → searxng) · `hybrid` (loop 0 LangSearch broad discovery, loops ≥1 Parallel micro-iteration) · single backends `searxng\|exa\|langsearch\|parallel` |
 | `--synth` | `extractive` (offline, deterministic) or `llm` (fluent, re-verified, marker-attributed since v2.4) |
 | `--reasoning-effort` | Opt-in OpenRouter reasoning (`max\|xhigh\|high\|medium\|low\|minimal`); default off |
 | `--advanced` | Force BGE cross-encoder rerank (default auto-ON for pro/research since v2.4, heuristic fallback if `rerankers` missing) |
@@ -294,6 +309,7 @@ This repository is maintained to release-engineering standards, not demo standar
 | Standalone web frontend (zero-install, client-side pipeline) | ✅ Shipped v3.0.0 (`search-pro.html`) |
 | General web retrieval in frontend (Brave, opt-in key) | ✅ Shipped v3.1.0 (replaces dead DDG endpoint) |
 | General web retrieval via Parallel Search MCP (free tier) | ✅ Shipped v3.2.0 (replaces Brave; batched web_search, excerpt evidence) |
+| Hybrid retrieval: LangSearch broad discovery + Parallel micro-iteration | ✅ Shipped v3.3.0 (bulk 10/query loop 0; summaries never count as full-read) |
 | Live harness re-run on v2.6 (M1–M5 incl. loops/diversity) | Planned (badges still reflect v2.3.0) |
 | Self-hosted SearXNG / Exa-Brave primary | Planned (infrastructure decision, not code) |
 | Human-preference grading vs frontier engines | Planned |

@@ -85,6 +85,8 @@
       <input type="text" id="searxng" placeholder="kosongkan bila tidak punya">
       <label for="parallel">Parallel API key (opsional — tanpa key tetap bisa, limit lebih rendah; daftar di platform.parallel.ai)</label>
       <input type="password" id="parallel" autocomplete="off">
+      <label for="langsearch">LangSearch API key (opsional — fase broad discovery bulk retrieval; tanpa key fase awal memakai Parallel; daftar di langsearch.com/dashboard)</label>
+      <input type="password" id="langsearch" autocomplete="off">
       <label for="custom">URL tambahan (opsional, satu per baris — diambil via reader)</label>
       <textarea id="custom" style="min-height:48px" placeholder="https://contoh.go.id/berita/..."></textarea>
     </details>
@@ -108,8 +110,10 @@
   </div>
 </main>
 <footer>
-  Search-Pro Web v3.2.0 · port browser dari pipeline search-pro (plan → fan-out → rerank →
-  fetch → verifikasi → sintesis). Klaim angka/tanggal/kutipan lolos hanya bila
+  Search-Pro Web v3.3.0 · port browser dari pipeline search-pro (plan → fan-out →
+  rerank → fetch → verifikasi → sintesis). Fase broad discovery memakai LangSearch
+  (bulk retrieval puluhan kandidat), iterasi mikro + verifikasi granular memakai
+  Parallel. Klaim angka/tanggal/kutipan lolos hanya bila
   verbatim di halaman yang dibaca penuh; sisanya masuk Unverified.
 </footer>
 
@@ -119,7 +123,7 @@
 /* Key diisi di aplikasi (tersimpan di browser masing-masing), bukan di file,
    agar file ini aman dibagikan. Dapatkan gratis di https://openrouter.ai/keys */
 const EMBEDDED_KEY = "";
-const WEB_VERSION = "3.2.0";
+const WEB_VERSION = "3.3.0";
 const MODEL = "nex-agi/nex-n2.5-pro:free";
 const OR_URL = "https://openrouter.ai/api/v1/chat/completions";
 const BUDGETS = {
@@ -484,6 +488,38 @@ async function wikiSearch(q, lang, limit) {
     via: "wikipedia-api" }));
 }
 const MCP_URL = "https://search.parallel.ai/mcp";
+const LANGSEARCH_URL = "https://api.langsearch.com/v1/web-search";
+function mapLangsearchResults(d, limit) {
+  // LangSearch envelope {code,data:{webPages:{value:[{name,url,snippet,summary,datePublished}]}}}.
+  // Fase broad discovery: summary panjang = nilai bulk retrieval.
+  const inner = (d && d.data) || d || {};
+  const vals = (((inner.webPages || {}).value) || inner.value || []);
+  const out = [];
+  for (const x of vals.slice(0, limit || 10)) {
+    if (!x.url) continue;
+    const summary = (x.summary || "").trim();
+    const snippet = (x.snippet || "").trim();
+    const text = summary.replace(/\s+/g, " ").trim();
+    out.push({ title: (x.name || x.title || "").slice(0, 140), url: x.url,
+      snippet: (summary || snippet).slice(0, 600), text,
+      published: x.datePublished || null, via: "langsearch" });
+  }
+  return out;
+}
+async function langsearchSearch(q, apiKey, limit, freshness) {
+  if (!apiKey) throw new Error("tanpa LangSearch key");
+  const r = await fetchTimeout(LANGSEARCH_URL, { method: "POST",
+    headers: { "Content-Type": "application/json",
+      "Authorization": "Bearer " + apiKey },
+    body: JSON.stringify({ query: q, freshness: freshness || "noLimit",
+      summary: true, count: Math.max(1, Math.min(10, limit || 10)) }) }, 25000);
+  if (!r.ok) throw new Error("langsearch http " + r.status);
+  const d = await r.json();
+  if (d && d.code !== undefined && d.code !== 200)
+    throw new Error("langsearch: code " + d.code + " " +
+      String(d.msg || d.message || "").slice(0, 200));
+  return mapLangsearchResults(d, limit);
+}
 async function mapParallelResults(d, limit) {
   // MCP content[0].text adalah JSON string {results:[{url,title,publish_date,excerpts[]}]}.
   const out = [];
@@ -630,7 +666,7 @@ function mdLite(s) {
     : ln).join("<br>");
   return h;
 }
-async function runPipeline(query, mode, synthMode, key, searxng, customUrls, onlog, parallelKey) {
+async function runPipeline(query, mode, synthMode, key, searxng, customUrls, onlog, parallelKey, langsearchKey) {
   const t0 = Date.now();
   const B = BUDGETS[mode];
   const intent = detectIntent(query);
@@ -657,15 +693,28 @@ async function runPipeline(query, mode, synthMode, key, searxng, customUrls, onl
       say("loop " + loop + ": " + queries.length + " follow-up");
     }
     allQueries = allQueries.concat(queries);
-    // fan-out: Parallel MCP (batch 3 query/call, excerpt verbatim) + wikipedia
-    // per varian + searxng opsional. (Brave diganti Parallel v3.2.0.)
+    // v3.3.0 hybrid fan-out:
+    // loop 0 = LangSearch broad discovery (bulk 10/query -> puluhan kandidat
+    //   sekaligus dengan summary panjang untuk rerank) + wikipedia + searxng.
+    // loops >=1 = Parallel micro iteration (batch 3 query/call, excerpt
+    //   verbatim untuk verifikasi granular) + wikipedia.
     let cands = [];
-    for (let bi = 0; bi < queries.length; bi += 3) {
-      const batch = queries.slice(bi, bi + 3);
-      try {
-        const got = await parallelSearch(query, batch, mcpState, parallelKey, 10);
-        cands = cands.concat(got);
-      } catch (e) { say("parallel gagal: " + e.message); }
+    if (loop === 0 && langsearchKey) {
+      for (const q of queries) {
+        try {
+          cands = cands.concat(await langsearchSearch(q, langsearchKey, 10));
+        } catch (e) { say("langsearch gagal: " + e.message); }
+      }
+    } else {
+      if (loop === 0 && !langsearchKey)
+        say("tanpa LangSearch key: broad discovery memakai Parallel.");
+      for (let bi = 0; bi < queries.length; bi += 3) {
+        const batch = queries.slice(bi, bi + 3);
+        try {
+          const got = await parallelSearch(query, batch, mcpState, parallelKey, 10);
+          cands = cands.concat(got);
+        } catch (e) { say("parallel gagal: " + e.message); }
+      }
     }
     for (const q of queries) {
       const jobs = [wikiSearch(q, intent.lang === "id" ? "id" : "en", 4)
@@ -694,13 +743,15 @@ async function runPipeline(query, mode, synthMode, key, searxng, customUrls, onl
     uniq.sort((a, b) => b._score - a._score);
     const ranked = uniq.slice(0, B.fetch);
     say("rerank: " + ranked.length + " teratas (" + rerankMethod + ")");
-    // fetch via jina (teks penuh) atau snippet-only
+    // fetch: full-read jujur. wikipedia/parallel excerpt verbatim boleh
+    // langsung jadi korpus; ringkasan langsearch TIDAK (bukan verbatim) —
+    // wajib fetch penuh via jina, gagal = snippet-only (tak terverifikasi).
     let nNew = 0;
     for (const c of ranked) {
       if (seenUrls.has(c.url)) continue;
       seenUrls.add(c.url);
       urlToTitle[c.url] = c.title || "";
-      if (c.text && c.text.length >= 300) {
+      if (c.text && c.text.length >= 300 && c.via !== "langsearch") {
         const fn = "doc" + (docIdx++) + ".md";
         urlToFile[c.url] = fn; bodies[fn] = c.text;
         fetched[c.url] = "ok"; nNew++;
@@ -810,9 +861,14 @@ function getParallelKey() {
   try { return localStorage.getItem("sp_parallel_key") || ""; }
   catch (e) { return ""; }
 }
+function getLangsearchKey() {
+  try { return localStorage.getItem("sp_langsearch_key") || ""; }
+  catch (e) { return ""; }
+}
 function boot() {
   $("key").value = getKey();
   try { $("parallel").value = getParallelKey(); } catch (e) { /* abaikan */ }
+  try { $("langsearch").value = getLangsearchKey(); } catch (e) { /* abaikan */ }
   $("demo").onclick = () => {
     $("q").value = "Berapa harga beras 2026 per kilogram dan bagaimana stok Bulog?";
   };
@@ -820,14 +876,16 @@ function boot() {
     try {
       localStorage.setItem("sp_openrouter_key", $("key").value.trim());
       localStorage.setItem("sp_parallel_key", $("parallel").value.trim());
+      localStorage.setItem("sp_langsearch_key", $("langsearch").value.trim());
     } catch (e) { /* abaikan */ }
     log("key disimpan di browser ini.");
   };
   $("clearkey").onclick = () => {
-    $("key").value = ""; $("parallel").value = "";
+    $("key").value = ""; $("parallel").value = ""; $("langsearch").value = "";
     try {
       localStorage.removeItem("sp_openrouter_key");
       localStorage.removeItem("sp_parallel_key");
+      localStorage.removeItem("sp_langsearch_key");
     } catch (e) { /* abaikan */ }
     log("key dihapus dari form + storage. File ini tetap tanpa key bawaan — " +
         "jangan tempel key ke file bila dibagikan.");
@@ -838,6 +896,7 @@ function boot() {
     const mode = $("mode").value, synthMode = $("synth").value;
     const key = $("key").value.trim();
     const parallelKey = $("parallel").value.trim();
+    const langsearchKey = $("langsearch").value.trim();
     const searxng = $("searxng").value.trim();
     const customUrls = $("custom").value.split("\n").map((s) => s.trim()).filter(Boolean);
     $("go").disabled = true;
@@ -845,10 +904,14 @@ function boot() {
     log("pertanyaan: " + query.slice(0, 120));
     if (!parallelKey)
       log("tanpa Parallel key: memakai tier gratis (limit lebih rendah).");
+    if (!langsearchKey)
+      log("tanpa LangSearch key: broad discovery memakai Parallel (bulk terbatas).");
+    else
+      log("hybrid: loop 0 LangSearch broad (bulk) → loop ≥1 Parallel mikro.");
     if (synthMode === "llm")
       log("mode llm: model gratis kadang antre 1–2 menit di OpenRouter, mohon tunggu…");
     try {
-      const r = await runPipeline(query, mode, synthMode, key, searxng, customUrls, log, parallelKey);
+      const r = await runPipeline(query, mode, synthMode, key, searxng, customUrls, log, parallelKey, langsearchKey);
       renderResult(query, mode, synthMode, r);
       log("selesai dalam " + r.elapsed + "s.");
     } catch (e) {

@@ -7,7 +7,7 @@
 
 1. **Intent IR** — Rewrite user prompt to `intent-ir.schema.json`. One topic per thread, max 5 follow-ups then re-brief. If ambiguous set `need_clarify=true` and ask before searching.
 2. **Plan** — Max 4 steps DAG. `best`: 1 step / 4 queries. `pro`: 2-3 steps / 8 queries. `research`: 3-4 steps / 12 queries.
-3. **Fan-out** — One parallel retrieval per sub-query via `websearch` (5-10 results each). Rewrite variants: `site:`, `"exact phrase"`, `-noise`, `filetype:pdf`, recency filter.
+3. **Fan-out** — Hybrid v3.3.0: loop 0 broad discovery via LangSearch (bulk 10/query → puluhan kandidat + summary untuk rerank; summary ≠ full-read, wajib fetch penuh) + Wikipedia per varian; loops ≥1 micro-iteration via Parallel MCP (batch 3 query/call, excerpt verbatim untuk verifikasi granular). Tanpa key: fallback Parallel-only + Wikipedia + SearXNG opsional. Rewrite variants: `site:`, `"exact phrase"`, `-noise`, `filetype:pdf`, recency filter.
 4. **Fetch** — `webfetch` top unique URLs only: best=4, pro=8, research=10. Save markdown to `/tmp`. Mark `paywall/js-empty/snippet-only` — never cite as verified.
 5. **Process (deterministic)** — Run `scripts/rerank.py` then `scripts/verify-citations.py`. No LLM for dedup/filter/score.
 6. **Verify gate** — Numeric/date/quote claim passes ONLY if verbatim (<=25 words) found via grep in fetched body. Target: >=6 verified claims from >=5 full-read sources. If yield <5, one backfill round with new queries. Else emit `Unverified` section.
