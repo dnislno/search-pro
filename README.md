@@ -145,6 +145,7 @@ is a tracked roadmap item, not a claimed result.
 | [v2.6.1](https://github.com/dnislno/search-pro/releases/tag/v2.6.1) | Gate year-loophole closed (bare years no longer count as backing); conflict groups keyed by topic anchors | P2 probe: 3/3 pointer claims demote (was 1/3); kurs-vs-price no longer grouped; 8 pytest + 10 legacy green |
 | [v2.6.2](https://github.com/dnislno/search-pro/releases/tag/v2.6.2) | run-json accumulates queries/candidates/fetched across all loops (was last loop only) | 2-loop mock run: 7 queries, 35 candidates, 8/8 fetched URLs recorded; suite green |
 | [v3.0.0](https://github.com/dnislno/search-pro/releases/tag/v3.0.0) | Standalone web frontend (`search-pro.html`): full client-side pipeline, zero-install, keyless by default | 22/22 JS tests; Jina/Wikipedia/OpenRouter verified live; push protection enforced keyless |
+| [v3.1.0](https://github.com/dnislno/search-pro/releases/tag/v3.1.0) | Dead DuckDuckGo endpoint replaced with Brave Search (optional key field, graceful fallback) | Mapper + no-key unit tests; endpoint alive (422 on dummy); 24/24 JS green |
 
 What deliberately did **not** ship: self-hosted SearXNG, Exa/Brave as primary,
 and human-preference grading — infrastructure and judgment calls, not code
@@ -290,6 +291,7 @@ This repository is maintained to release-engineering standards, not demo standar
 | Conflict grouping by topic anchors | ✅ Shipped v2.6.1 (same-unit, different-context figures stay separate) |
 | Loop-accurate run-json (queries/candidates/fetched accumulate) | ✅ Shipped v2.6.2 |
 | Standalone web frontend (zero-install, client-side pipeline) | ✅ Shipped v3.0.0 (`search-pro.html`) |
+| General web retrieval in frontend (Brave, opt-in key) | ✅ Shipped v3.1.0 (replaces dead DDG endpoint) |
 | Live harness re-run on v2.6 (M1–M5 incl. loops/diversity) | Planned (badges still reflect v2.3.0) |
 | Self-hosted SearXNG / Exa-Brave primary | Planned (infrastructure decision, not code) |
 | Human-preference grading vs frontier engines | Planned |

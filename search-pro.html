@@ -83,6 +83,8 @@
       </div>
       <label for="searxng">SearXNG URL sendiri (opsional, cth: http://localhost:8888)</label>
       <input type="text" id="searxng" placeholder="kosongkan bila tidak punya">
+      <label for="brave">Brave API key (opsional — pencarian web umum; gratis 2000/bln di brave.com/search/api)</label>
+      <input type="password" id="brave" autocomplete="off">
       <label for="custom">URL tambahan (opsional, satu per baris — diambil via reader)</label>
       <textarea id="custom" style="min-height:48px" placeholder="https://contoh.go.id/berita/..."></textarea>
     </details>
@@ -106,7 +108,7 @@
   </div>
 </main>
 <footer>
-  Search-Pro Web v3.0.0 · port browser dari pipeline search-pro (plan → fan-out → rerank →
+  Search-Pro Web v3.1.0 · port browser dari pipeline search-pro (plan → fan-out → rerank →
   fetch → verifikasi → sintesis). Klaim angka/tanggal/kutipan lolos hanya bila
   verbatim di halaman yang dibaca penuh; sisanya masuk Unverified.
 </footer>
@@ -117,7 +119,7 @@
 /* Key diisi di aplikasi (tersimpan di browser masing-masing), bukan di file,
    agar file ini aman dibagikan. Dapatkan gratis di https://openrouter.ai/keys */
 const EMBEDDED_KEY = "";
-const WEB_VERSION = "3.0.0";
+const WEB_VERSION = "3.1.0";
 const MODEL = "nex-agi/nex-n2.5-pro:free";
 const OR_URL = "https://openrouter.ai/api/v1/chat/completions";
 const BUDGETS = {
@@ -481,26 +483,23 @@ async function wikiSearch(q, lang, limit) {
     snippet: (p.extract || "").slice(0, 600), text: p.extract || "",
     via: "wikipedia-api" }));
 }
-async function ddgSearch(q, limit) {
-  const u = "https://api.duckduckgo.com/?q=" + encodeURIComponent(q) +
-    "&format=json&no_html=1&skip_disambig=1";
-  const r = await fetchTimeout(u, {}, 15000);
-  if (!r.ok) throw new Error("ddg http " + r.status);
-  const d = await r.json();
+async function mapBraveResults(d, limit) {
   const out = [];
-  const walk = (arr) => {
-    for (const t of arr || []) {
-      if (t.Topics) walk(t.Topics);
-      else if (t.FirstURL && t.Text)
-        out.push({ title: (t.Text || "").slice(0, 120), url: t.FirstURL,
-                   snippet: t.Text || "", text: "", via: "ddg-abstract" });
-    }
-  };
-  walk(d.RelatedTopics);
-  if (d.AbstractURL && d.AbstractText)
-    out.unshift({ title: (d.Heading || d.AbstractText).slice(0, 120),
-      url: d.AbstractURL, snippet: d.AbstractText, text: "", via: "ddg-abstract" });
-  return out.slice(0, limit || 5);
+  for (const x of (((d || {}).web || {}).results || []).slice(0, limit || 5)) {
+    if (x.url) out.push({ title: (x.title || "").slice(0, 120), url: x.url,
+      snippet: x.description || "", text: "", via: "brave" });
+  }
+  return out;
+}
+async function braveSearch(q, key, limit, country) {
+  if (!key) throw new Error("tanpa Brave key");
+  const u = "https://api.search.brave.com/res/v1/web/search?q=" +
+    encodeURIComponent(q) + "&count=" + (limit || 5) +
+    "&country=" + (country || "ID") + "&search_lang=id";
+  const r = await fetchTimeout(u, { headers: { "Accept": "application/json",
+    "X-Subscription-Token": key } }, 20000);
+  if (!r.ok) throw new Error("brave http " + r.status);
+  return mapBraveResults(await r.json(), limit);
 }
 async function searxngSearch(q, base, limit, lang) {
   const u = base.replace(/\/$/, "") + "/search?q=" + encodeURIComponent(q) +
@@ -583,7 +582,7 @@ function mdLite(s) {
     : ln).join("<br>");
   return h;
 }
-async function runPipeline(query, mode, synthMode, key, searxng, customUrls, onlog) {
+async function runPipeline(query, mode, synthMode, key, searxng, customUrls, onlog, braveKey) {
   const t0 = Date.now();
   const B = BUDGETS[mode];
   const intent = detectIntent(query);
@@ -607,13 +606,16 @@ async function runPipeline(query, mode, synthMode, key, searxng, customUrls, onl
       say("loop " + loop + ": " + queries.length + " follow-up");
     }
     allQueries = allQueries.concat(queries);
-    // fan-out: wikipedia (id+en) + duckduckgo + searxng opsional
+    // fan-out: wikipedia (id+en) + brave (bila ada key) + searxng opsional.
+    // (DuckDuckGo IA dihapus v3.1.0: endpoint-nya mati, mengembalikan HTML.)
     let cands = [];
     for (const q of queries) {
       const jobs = [wikiSearch(q, intent.lang === "id" ? "id" : "en", 4)
         .catch(() => []),
-        wikiSearch(q, intent.lang === "id" ? "en" : "id", 3).catch(() => []),
-        ddgSearch(q, 4).catch((e) => { say("ddg gagal: " + e.message); return []; })];
+        wikiSearch(q, intent.lang === "id" ? "en" : "id", 3).catch(() => [])];
+      if (braveKey)
+        jobs.push(braveSearch(q, braveKey, 5, intent.lang === "id" ? "ID" : "US")
+          .catch((e) => { say("brave gagal: " + e.message); return []; }));
       if (searxng)
         jobs.push(searxngSearch(q, searxng, B.perQuery, "auto")
           .catch((e) => { say("searxng gagal: " + e.message); return []; }));
@@ -749,36 +751,49 @@ function getKey() {
   } catch (e) { /* storage diblokir */ }
   return EMBEDDED_KEY || "";
 }
+function getBraveKey() {
+  try { return localStorage.getItem("sp_brave_key") || ""; }
+  catch (e) { return ""; }
+}
 function boot() {
   $("key").value = getKey();
+  try { $("brave").value = getBraveKey(); } catch (e) { /* abaikan */ }
   $("demo").onclick = () => {
     $("q").value = "Berapa harga beras 2026 per kilogram dan bagaimana stok Bulog?";
   };
   $("savekey").onclick = () => {
-    try { localStorage.setItem("sp_openrouter_key", $("key").value.trim()); }
-    catch (e) { /* abaikan */ }
+    try {
+      localStorage.setItem("sp_openrouter_key", $("key").value.trim());
+      localStorage.setItem("sp_brave_key", $("brave").value.trim());
+    } catch (e) { /* abaikan */ }
     log("key disimpan di browser ini.");
   };
   $("clearkey").onclick = () => {
-    $("key").value = "";
-    try { localStorage.removeItem("sp_openrouter_key"); } catch (e) { /* abaikan */ }
-    log("key dihapus dari form + storage. File ini tetap memuat key bawaan — " +
-        "jangan bagikan file tanpa mengganti key bawaan di kode.");
+    $("key").value = ""; $("brave").value = "";
+    try {
+      localStorage.removeItem("sp_openrouter_key");
+      localStorage.removeItem("sp_brave_key");
+    } catch (e) { /* abaikan */ }
+    log("key dihapus dari form + storage. File ini tetap tanpa key bawaan — " +
+        "jangan tempel key ke file bila dibagikan.");
   };
   $("go").onclick = async () => {
     const query = $("q").value.trim();
     if (!query) { log("tulis pertanyaan dulu."); return; }
     const mode = $("mode").value, synthMode = $("synth").value;
     const key = $("key").value.trim();
+    const braveKey = $("brave").value.trim();
     const searxng = $("searxng").value.trim();
     const customUrls = $("custom").value.split("\n").map((s) => s.trim()).filter(Boolean);
     $("go").disabled = true;
     $("res").style.display = "none";
     log("pertanyaan: " + query.slice(0, 120));
+    if (!braveKey && !searxng)
+      log("tanpa Brave/SearXNG key: retrieval dari Wikipedia + URL tempelan.");
     if (synthMode === "llm")
       log("mode llm: model gratis kadang antre 1–2 menit di OpenRouter, mohon tunggu…");
     try {
-      const r = await runPipeline(query, mode, synthMode, key, searxng, customUrls, log);
+      const r = await runPipeline(query, mode, synthMode, key, searxng, customUrls, log, braveKey);
       renderResult(query, mode, synthMode, r);
       log("selesai dalam " + r.elapsed + "s.");
     } catch (e) {
