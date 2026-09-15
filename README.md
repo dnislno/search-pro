@@ -144,6 +144,7 @@ is a tracked roadmap item, not a claimed result.
 | [v2.6.0](https://github.com/dnislno/search-pro/releases/tag/v2.6.0) | Authority tiers + diversity report (provenance + run-json); structured research synthesis; opt-in renderer stub; harness M4/M5 | Tier/diversity math unit-checked; renderer provably inert by default |
 | [v2.6.1](https://github.com/dnislno/search-pro/releases/tag/v2.6.1) | Gate year-loophole closed (bare years no longer count as backing); conflict groups keyed by topic anchors | P2 probe: 3/3 pointer claims demote (was 1/3); kurs-vs-price no longer grouped; 8 pytest + 10 legacy green |
 | [v2.6.2](https://github.com/dnislno/search-pro/releases/tag/v2.6.2) | run-json accumulates queries/candidates/fetched across all loops (was last loop only) | 2-loop mock run: 7 queries, 35 candidates, 8/8 fetched URLs recorded; suite green |
+| [v3.0.0](https://github.com/dnislno/search-pro/releases/tag/v3.0.0) | Standalone web frontend (`search-pro.html`): full client-side pipeline, zero-install, keyless by default | 22/22 JS tests; Jina/Wikipedia/OpenRouter verified live; push protection enforced keyless |
 
 What deliberately did **not** ship: self-hosted SearXNG, Exa/Brave as primary,
 and human-preference grading — infrastructure and judgment calls, not code
@@ -241,6 +242,7 @@ python search.py --query "..." [--mode best|pro|research] [--provider auto|searx
 ```
 search-pro/
 ├── search.py               # orchestrator CLI (plan → search → rerank → fetch → verify → synthesize)
+├── search-pro.html         # standalone web frontend (same pipeline, runs in the browser)
 ├── providers.py            # SearXNG (failover ring, locale bias fix) + Exa clients
 ├── fetch.py                # fetch chain: direct → official API → reader proxy, honest statuses
 ├── synthesize.py           # extractive composer + Anthropic/OpenAI/OpenRouter rewrite
@@ -287,6 +289,7 @@ This repository is maintained to release-engineering standards, not demo standar
 | Corroboration gate year-figure loophole | ✅ Shipped v2.6.1 (years excluded from backing check) |
 | Conflict grouping by topic anchors | ✅ Shipped v2.6.1 (same-unit, different-context figures stay separate) |
 | Loop-accurate run-json (queries/candidates/fetched accumulate) | ✅ Shipped v2.6.2 |
+| Standalone web frontend (zero-install, client-side pipeline) | ✅ Shipped v3.0.0 (`search-pro.html`) |
 | Live harness re-run on v2.6 (M1–M5 incl. loops/diversity) | Planned (badges still reflect v2.3.0) |
 | Self-hosted SearXNG / Exa-Brave primary | Planned (infrastructure decision, not code) |
 | Human-preference grading vs frontier engines | Planned |

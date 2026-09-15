@@ -106,7 +106,7 @@
   </div>
 </main>
 <footer>
-  Search-Pro Web · port browser dari pipeline search-pro (plan → fan-out → rerank →
+  Search-Pro Web v3.0.0 · port browser dari pipeline search-pro (plan → fan-out → rerank →
   fetch → verifikasi → sintesis). Klaim angka/tanggal/kutipan lolos hanya bila
   verbatim di halaman yang dibaca penuh; sisanya masuk Unverified.
 </footer>
@@ -117,6 +117,7 @@
 /* Key diisi di aplikasi (tersimpan di browser masing-masing), bukan di file,
    agar file ini aman dibagikan. Dapatkan gratis di https://openrouter.ai/keys */
 const EMBEDDED_KEY = "";
+const WEB_VERSION = "3.0.0";
 const MODEL = "nex-agi/nex-n2.5-pro:free";
 const OR_URL = "https://openrouter.ai/api/v1/chat/completions";
 const BUDGETS = {
@@ -732,7 +733,7 @@ function renderResult(query, mode, synthMode, r) {
   } else { $("hunv").style.display = "none"; $("unv").innerHTML = ""; }
   const a = r.diversity.authority;
   $("prov").textContent =
-    "model=search-pro-web/" + MODEL + " mode=" + mode +
+    "model=search-pro-web/" + WEB_VERSION + "+" + MODEL + " mode=" + mode +
     " queries=" + r.allQueries.length + " fetched=" + r.evidence.length +
     " verified=" + v.stats.verified + "/" + r.claims.length +
     " demoted=" + r.demoted + " loops=" + r.loopsUsed +

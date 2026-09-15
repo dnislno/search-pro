@@ -21,7 +21,7 @@ import providers
 from fetch import fetch
 import synthesize
 
-VERSION = "2.6.2"
+VERSION = "3.0.0"
 
 BUDGETS = {
     "best": {"queries": 4, "per_query": 5, "fetch": 4},
