@@ -1,0 +1,126 @@
+{
+  "claim": {
+    "figure": "$12",
+    "entity": "HR software per user per month pricing SMB"
+  },
+  "grade": "conflicted",
+  "conflict": true,
+  "rival_figures": [
+    "50"
+  ],
+  "verbatim_origins": [
+    "pub:ukg.com",
+    "pub:resources.workable.com",
+    "pub:firsthr.app",
+    "pub:happyhr.com"
+  ],
+  "snippet_origins": [],
+  "origins": {
+    "pub:ukg.com": {
+      "reliability": "secondary",
+      "support": "verbatim",
+      "urls": [
+        "https://www.ukg.com/learn/article-library/hr-leaders/hr-software-cost-guide-how-much-should-your-organization-budget"
+      ],
+      "rival_figures": [
+        "5",
+        "30",
+        "50",
+        "750",
+        "500",
+        "25000"
+      ]
+    },
+    "pub:de.wikipedia.org": {
+      "reliability": "secondary",
+      "support": "none",
+      "urls": [
+        "https://de.wikipedia.org/wiki/$"
+      ],
+      "rival_figures": []
+    },
+    "pub:resources.workable.com": {
+      "reliability": "secondary",
+      "support": "verbatim",
+      "urls": [
+        "https://resources.workable.com/tutorial/hr-software-pricing"
+      ],
+      "rival_figures": [
+        "3",
+        "85",
+        "225"
+      ]
+    },
+    "pub:en.wikipedia.org": {
+      "reliability": "secondary",
+      "support": "none",
+      "urls": [
+        "https://en.wikipedia.org/wiki/Dollar_sign"
+      ],
+      "rival_figures": []
+    },
+    "pub:firsthr.app": {
+      "reliability": "secondary",
+      "support": "verbatim",
+      "urls": [
+        "https://firsthr.app/compare/onboarding/onboarding-software-pricing"
+      ],
+      "rival_figures": [
+        "50",
+        "1000",
+        "98",
+        "198",
+        "50",
+        "125"
+      ]
+    },
+    "pub:wise.com": {
+      "reliability": "secondary",
+      "support": "none",
+      "urls": [
+        "https://wise.com/de/blog/dollar-zeichen"
+      ],
+      "rival_figures": []
+    },
+    "pub:hr-swiss.ch": {
+      "reliability": "secondary",
+      "support": "none",
+      "urls": [
+        "https://hr-swiss.ch/"
+      ],
+      "rival_figures": []
+    },
+    "pub:happyhr.com": {
+      "reliability": "secondary",
+      "support": "verbatim",
+      "urls": [
+        "https://www.happyhr.com/pricing"
+      ],
+      "rival_figures": [
+        "8",
+        "8",
+        "10",
+        "0",
+        "8",
+        "10"
+      ]
+    },
+    "pub:hr.de": {
+      "reliability": "secondary",
+      "support": "none",
+      "urls": [
+        "https://www.hr.de/index.html"
+      ],
+      "rival_figures": []
+    },
+    "pub:hrse.ch": {
+      "reliability": "secondary",
+      "support": "none",
+      "urls": [
+        "https://www.hrse.ch/de"
+      ],
+      "rival_figures": []
+    }
+  },
+  "pointers_excluded": []
+}

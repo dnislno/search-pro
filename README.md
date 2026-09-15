@@ -69,6 +69,6 @@ python scripts/rerank.py --input candidates.json --query "..." --advanced
 
 ## Roadmap
 
-`--advanced` rerank service · academic/YouTube/Reddit verticals (Perplexica-style) · scheduled deep-research runs · OpenAI-compatible `/search` API.
+`--advanced` rerank service · academic/YouTube/Reddit verticals (Perplexica-style) · scheduled deep-research runs · OpenAI-compatible `/search` API · paywall corroboration (`corroborate.py`, v2.2.0 experiment: figure-search + independence + grade).
 
 MIT-licensed. Star it, self-host it, and hold every answer to its sources.

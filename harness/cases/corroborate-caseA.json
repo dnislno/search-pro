@@ -1,0 +1,106 @@
+{
+  "claim": {
+    "figure": "$30",
+    "entity": "HRIS per month per employee pricing"
+  },
+  "grade": "confirmed",
+  "conflict": false,
+  "rival_figures": [],
+  "verbatim_origins": [
+    "pub:workzoom.com",
+    "pub:harmonyhr.org"
+  ],
+  "snippet_origins": [
+    "pub:hrstak.com"
+  ],
+  "origins": {
+    "pub:hrstak.com": {
+      "reliability": "secondary",
+      "support": "snippet",
+      "urls": [
+        "https://hrstak.com/blog/hris-software-pricing-small-business"
+      ],
+      "rival_figures": []
+    },
+    "pub:de.wikipedia.org": {
+      "reliability": "secondary",
+      "support": "none",
+      "urls": [
+        "https://de.wikipedia.org/wiki/$"
+      ],
+      "rival_figures": []
+    },
+    "pub:workzoom.com": {
+      "reliability": "secondary",
+      "support": "verbatim",
+      "urls": [
+        "https://www.workzoom.com/pricing/"
+      ],
+      "rival_figures": [
+        "4",
+        "360",
+        "4",
+        "5",
+        "4",
+        "1195"
+      ]
+    },
+    "pub:en.wikipedia.org": {
+      "reliability": "secondary",
+      "support": "none",
+      "urls": [
+        "https://en.wikipedia.org/wiki/Dollar_sign"
+      ],
+      "rival_figures": []
+    },
+    "pub:harmonyhr.org": {
+      "reliability": "secondary",
+      "support": "verbatim",
+      "urls": [
+        "https://harmonyhr.org/blog/hr-software-pricing-comparison-2025.html"
+      ],
+      "rival_figures": [
+        "8",
+        "20",
+        "12",
+        "55",
+        "7",
+        "8"
+      ]
+    },
+    "pub:wise.com": {
+      "reliability": "secondary",
+      "support": "none",
+      "urls": [
+        "https://wise.com/de/blog/dollar-zeichen"
+      ],
+      "rival_figures": []
+    },
+    "pub:forums.commentcamarche.net": {
+      "reliability": "secondary",
+      "support": "none",
+      "urls": [
+        "https://forums.commentcamarche.net/forum/affich-37772507-site-le-bon-coin-une-erreur-technique-est-survenue",
+        "https://forums.commentcamarche.net/forum/affich-37992704-peut-on-imprimer-une-conversation-sur-messagerie-du-bon-coin"
+      ],
+      "rival_figures": []
+    },
+    "pub:60millions-mag.com": {
+      "reliability": "secondary",
+      "support": "none",
+      "urls": [
+        "https://www.60millions-mag.com/banque-assurance/article/envoyer-de-l-argent-avec-wero-comment-ca-marche-25444-20260304/"
+      ],
+      "rival_figures": []
+    },
+    "pub:icehrm.com": {
+      "reliability": "secondary",
+      "support": "none",
+      "urls": [
+        "https://icehrm.com/blog/how-much-does-hr-software-cost-complete-2026-pricing-guide-q-57/"
+      ],
+      "rival_figures": []
+    }
+  },
+  "pointers_excluded": []
+}
