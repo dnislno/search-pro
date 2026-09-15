@@ -83,8 +83,8 @@
       </div>
       <label for="searxng">SearXNG URL sendiri (opsional, cth: http://localhost:8888)</label>
       <input type="text" id="searxng" placeholder="kosongkan bila tidak punya">
-      <label for="brave">Brave API key (opsional — pencarian web umum; gratis 2000/bln di brave.com/search/api)</label>
-      <input type="password" id="brave" autocomplete="off">
+      <label for="parallel">Parallel API key (opsional — tanpa key tetap bisa, limit lebih rendah; daftar di platform.parallel.ai)</label>
+      <input type="password" id="parallel" autocomplete="off">
       <label for="custom">URL tambahan (opsional, satu per baris — diambil via reader)</label>
       <textarea id="custom" style="min-height:48px" placeholder="https://contoh.go.id/berita/..."></textarea>
     </details>
@@ -108,7 +108,7 @@
   </div>
 </main>
 <footer>
-  Search-Pro Web v3.1.0 · port browser dari pipeline search-pro (plan → fan-out → rerank →
+  Search-Pro Web v3.2.0 · port browser dari pipeline search-pro (plan → fan-out → rerank →
   fetch → verifikasi → sintesis). Klaim angka/tanggal/kutipan lolos hanya bila
   verbatim di halaman yang dibaca penuh; sisanya masuk Unverified.
 </footer>
@@ -119,7 +119,7 @@
 /* Key diisi di aplikasi (tersimpan di browser masing-masing), bukan di file,
    agar file ini aman dibagikan. Dapatkan gratis di https://openrouter.ai/keys */
 const EMBEDDED_KEY = "";
-const WEB_VERSION = "3.1.0";
+const WEB_VERSION = "3.2.0";
 const MODEL = "nex-agi/nex-n2.5-pro:free";
 const OR_URL = "https://openrouter.ai/api/v1/chat/completions";
 const BUDGETS = {
@@ -483,23 +483,71 @@ async function wikiSearch(q, lang, limit) {
     snippet: (p.extract || "").slice(0, 600), text: p.extract || "",
     via: "wikipedia-api" }));
 }
-async function mapBraveResults(d, limit) {
+const MCP_URL = "https://search.parallel.ai/mcp";
+async function mapParallelResults(d, limit) {
+  // MCP content[0].text adalah JSON string {results:[{url,title,publish_date,excerpts[]}]}.
   const out = [];
-  for (const x of (((d || {}).web || {}).results || []).slice(0, limit || 5)) {
-    if (x.url) out.push({ title: (x.title || "").slice(0, 120), url: x.url,
-      snippet: x.description || "", text: "", via: "brave" });
+  const results = (((d || {}).result || {}).results) || (d.results || []);
+  for (const x of results.slice(0, limit || 10)) {
+    if (!x.url) continue;
+    const text = ((x.excerpts || []).join("\n")).replace(/\s+/g, " ").trim();
+    out.push({ title: (x.title || "").slice(0, 140), url: x.url,
+      snippet: text.slice(0, 600), text,
+      published: x.publish_date || null, via: "parallel" });
   }
   return out;
 }
-async function braveSearch(q, key, limit, country) {
-  if (!key) throw new Error("tanpa Brave key");
-  const u = "https://api.search.brave.com/res/v1/web/search?q=" +
-    encodeURIComponent(q) + "&count=" + (limit || 5) +
-    "&country=" + (country || "ID") + "&search_lang=id";
-  const r = await fetchTimeout(u, { headers: { "Accept": "application/json",
-    "X-Subscription-Token": key } }, 20000);
-  if (!r.ok) throw new Error("brave http " + r.status);
-  return mapBraveResults(await r.json(), limit);
+function parseMCPBody(body) {
+  // Streamable HTTP: JSON biasa ATAU SSE (baris "data: {...}").
+  const t = (body || "").trim();
+  if (!t) throw new Error("mcp: respons kosong");
+  if (t[0] === "{") return JSON.parse(t);
+  const datas = t.split("\n").filter((ln) => ln.startsWith("data:"))
+    .map((ln) => ln.slice(5).trim()).filter((s) => s && s !== "[DONE]");
+  if (!datas.length) throw new Error("mcp: tanpa payload data");
+  return JSON.parse(datas[datas.length - 1]);
+}
+async function mcpCall(payload, session, apiKey) {
+  const headers = { "Content-Type": "application/json",
+    "Accept": "application/json, text/event-stream" };
+  if (apiKey) headers["Authorization"] = "Bearer " + apiKey;
+  if (session) headers["Mcp-Session-Id"] = session;
+  const r = await fetchTimeout(MCP_URL, { method: "POST",
+    headers, body: JSON.stringify(payload) }, 90000);
+  const sid = r.headers.get("Mcp-Session-Id") || session || "";
+  if (!r.ok) throw new Error("mcp http " + r.status);
+  return { data: parseMCPBody(await r.text()), session: sid };
+}
+async function mcpEnsureSession(st, apiKey) {
+  if (st.sid) return st.sid;
+  const init = await mcpCall({ jsonrpc: "2.0", id: 1, method: "initialize",
+    params: { protocolVersion: "2025-03-26", capabilities: {},
+              clientInfo: { name: "search-pro-web", version: WEB_VERSION } } },
+    "", apiKey);
+  st.sid = init.session;
+  await mcpCall({ jsonrpc: "2.0", method: "notifications/initialized",
+    params: {} }, st.sid, apiKey);
+  return st.sid;
+}
+async function parallelSearch(objective, queries, st, apiKey, limit) {
+  // Satu call web_search membawa 2-3 query (anjuran Parallel) + session_id
+  // stabil untuk rate-limit tier gratis. Excerpt = teks verbatim sumber.
+  const sid = await mcpEnsureSession(st, apiKey);
+  const args = { objective: String(objective || "").slice(0, 500),
+    search_queries: queries.slice(0, 3),
+    session_id: st.parallelSession };
+  const res = await mcpCall({ jsonrpc: "2.0", id: Date.now() % 100000,
+    method: "tools/call",
+    params: { name: "web_search", arguments: args } }, sid, apiKey);
+  const blocks = (((res.data || {}).result || {}).content) || [];
+  if (res.data && res.data.result && res.data.result.isError)
+    throw new Error("parallel: " + blocks.map((b) => b.text || "")
+      .join(" ").slice(0, 300));
+  const joined = blocks.map((b) => b.text || "").join("\n");
+  let parsed;
+  try { parsed = JSON.parse(joined); }
+  catch (e) { throw new Error("parallel: respons tak terduga"); }
+  return mapParallelResults(parsed, limit);
 }
 async function searxngSearch(q, base, limit, lang) {
   const u = base.replace(/\/$/, "") + "/search?q=" + encodeURIComponent(q) +
@@ -582,13 +630,16 @@ function mdLite(s) {
     : ln).join("<br>");
   return h;
 }
-async function runPipeline(query, mode, synthMode, key, searxng, customUrls, onlog, braveKey) {
+async function runPipeline(query, mode, synthMode, key, searxng, customUrls, onlog, parallelKey) {
   const t0 = Date.now();
   const B = BUDGETS[mode];
   const intent = detectIntent(query);
   const seenUrls = new Set(), seenQ = new Set();
   const urlToFile = {}, urlToTitle = {}, bodies = {}, fetched = {};
   let docIdx = 0, loopsUsed = 0, rerankMethod = "heuristic-v1";
+  // Satu sesi MCP + session_id stabil untuk seluruh run (anjuran rate-limit tier gratis).
+  const mcpState = { sid: "", parallelSession: "sp-" + Math.random().toString(16).slice(2) +
+    Math.random().toString(16).slice(2) };
   let bullets = [], claims = [], evidence = [];
   let verdict = { verified: [], unverified: [], stats: { passRate: 0 } };
   let demoted = 0, followupsAll = [], allQueries = [];
@@ -606,16 +657,20 @@ async function runPipeline(query, mode, synthMode, key, searxng, customUrls, onl
       say("loop " + loop + ": " + queries.length + " follow-up");
     }
     allQueries = allQueries.concat(queries);
-    // fan-out: wikipedia (id+en) + brave (bila ada key) + searxng opsional.
-    // (DuckDuckGo IA dihapus v3.1.0: endpoint-nya mati, mengembalikan HTML.)
+    // fan-out: Parallel MCP (batch 3 query/call, excerpt verbatim) + wikipedia
+    // per varian + searxng opsional. (Brave diganti Parallel v3.2.0.)
     let cands = [];
+    for (let bi = 0; bi < queries.length; bi += 3) {
+      const batch = queries.slice(bi, bi + 3);
+      try {
+        const got = await parallelSearch(query, batch, mcpState, parallelKey, 10);
+        cands = cands.concat(got);
+      } catch (e) { say("parallel gagal: " + e.message); }
+    }
     for (const q of queries) {
       const jobs = [wikiSearch(q, intent.lang === "id" ? "id" : "en", 4)
         .catch(() => []),
         wikiSearch(q, intent.lang === "id" ? "en" : "id", 3).catch(() => [])];
-      if (braveKey)
-        jobs.push(braveSearch(q, braveKey, 5, intent.lang === "id" ? "ID" : "US")
-          .catch((e) => { say("brave gagal: " + e.message); return []; }));
       if (searxng)
         jobs.push(searxngSearch(q, searxng, B.perQuery, "auto")
           .catch((e) => { say("searxng gagal: " + e.message); return []; }));
@@ -751,28 +806,28 @@ function getKey() {
   } catch (e) { /* storage diblokir */ }
   return EMBEDDED_KEY || "";
 }
-function getBraveKey() {
-  try { return localStorage.getItem("sp_brave_key") || ""; }
+function getParallelKey() {
+  try { return localStorage.getItem("sp_parallel_key") || ""; }
   catch (e) { return ""; }
 }
 function boot() {
   $("key").value = getKey();
-  try { $("brave").value = getBraveKey(); } catch (e) { /* abaikan */ }
+  try { $("parallel").value = getParallelKey(); } catch (e) { /* abaikan */ }
   $("demo").onclick = () => {
     $("q").value = "Berapa harga beras 2026 per kilogram dan bagaimana stok Bulog?";
   };
   $("savekey").onclick = () => {
     try {
       localStorage.setItem("sp_openrouter_key", $("key").value.trim());
-      localStorage.setItem("sp_brave_key", $("brave").value.trim());
+      localStorage.setItem("sp_parallel_key", $("parallel").value.trim());
     } catch (e) { /* abaikan */ }
     log("key disimpan di browser ini.");
   };
   $("clearkey").onclick = () => {
-    $("key").value = ""; $("brave").value = "";
+    $("key").value = ""; $("parallel").value = "";
     try {
       localStorage.removeItem("sp_openrouter_key");
-      localStorage.removeItem("sp_brave_key");
+      localStorage.removeItem("sp_parallel_key");
     } catch (e) { /* abaikan */ }
     log("key dihapus dari form + storage. File ini tetap tanpa key bawaan — " +
         "jangan tempel key ke file bila dibagikan.");
@@ -782,18 +837,18 @@ function boot() {
     if (!query) { log("tulis pertanyaan dulu."); return; }
     const mode = $("mode").value, synthMode = $("synth").value;
     const key = $("key").value.trim();
-    const braveKey = $("brave").value.trim();
+    const parallelKey = $("parallel").value.trim();
     const searxng = $("searxng").value.trim();
     const customUrls = $("custom").value.split("\n").map((s) => s.trim()).filter(Boolean);
     $("go").disabled = true;
     $("res").style.display = "none";
     log("pertanyaan: " + query.slice(0, 120));
-    if (!braveKey && !searxng)
-      log("tanpa Brave/SearXNG key: retrieval dari Wikipedia + URL tempelan.");
+    if (!parallelKey)
+      log("tanpa Parallel key: memakai tier gratis (limit lebih rendah).");
     if (synthMode === "llm")
       log("mode llm: model gratis kadang antre 1–2 menit di OpenRouter, mohon tunggu…");
     try {
-      const r = await runPipeline(query, mode, synthMode, key, searxng, customUrls, log, braveKey);
+      const r = await runPipeline(query, mode, synthMode, key, searxng, customUrls, log, parallelKey);
       renderResult(query, mode, synthMode, r);
       log("selesai dalam " + r.elapsed + "s.");
     } catch (e) {
