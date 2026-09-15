@@ -53,13 +53,19 @@ def _post_json(url, payload, headers, timeout=60):
         return json.loads(r.read().decode("utf-8", "ignore"))
 
 
-def llm_rewrite(query, evidence, provider="auto"):
+OPENROUTER_DEFAULT_MODEL = "nex-agi/nex-n2.5-pro:free"
+
+
+def llm_rewrite(query, evidence, provider="auto", model=None):
     """Rewrite extractive bullets fluently. Keeps [[n]](url) markers."""
     if provider == "auto":
         provider = ("anthropic" if os.environ.get("ANTHROPIC_API_KEY")
-                    else "openai" if os.environ.get("OPENAI_API_KEY") else None)
+                    else "openai" if os.environ.get("OPENAI_API_KEY")
+                    else "openrouter" if os.environ.get("OPENROUTER_API_KEY")
+                    else None)
     if provider is None:
-        raise RuntimeError("No LLM key: set ANTHROPIC_API_KEY or OPENAI_API_KEY")
+        raise RuntimeError(
+            "No LLM key: set ANTHROPIC_API_KEY, OPENAI_API_KEY, or OPENROUTER_API_KEY")
     ev_txt = "\n".join(
         f"[{e['n']}] {e['title']} {e['url']}\n" + "\n".join(e["chunks"])
         for e in evidence)
@@ -75,6 +81,21 @@ def llm_rewrite(query, evidence, provider="auto"):
              "x-api-key": os.environ["ANTHROPIC_API_KEY"],
              "anthropic-version": "2023-06-01"})
         return "".join(b.get("text", "") for b in d.get("content", []))
+    if provider == "openrouter":
+        model = model or os.environ.get("OPENROUTER_MODEL",
+                                        OPENROUTER_DEFAULT_MODEL)
+        d = _post_json("https://openrouter.ai/api/v1/chat/completions",
+            {"model": model, "max_tokens": 2000,
+             "reasoning": {"effort": "high"},
+             "messages": [
+                {"role": "system", "content": sys},
+                {"role": "user",
+                 "content": f"Question: {query}\n\nEvidence:\n{ev_txt}"}]},
+            {"Content-Type": "application/json",
+             "Authorization": f"Bearer {os.environ['OPENROUTER_API_KEY']}",
+             "HTTP-Referer": "https://github.com/dnislno/search-pro",
+             "X-Title": "search-pro"})
+        return d["choices"][0]["message"]["content"]
     d = _post_json("https://api.openai.com/v1/chat/completions",
         {"model": "gpt-5.2", "max_tokens": 1500, "messages": [
             {"role": "system", "content": sys},

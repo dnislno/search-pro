@@ -56,6 +56,10 @@ def main():
     ap.add_argument("--provider", choices=["auto", "searxng", "exa"], default="auto")
     ap.add_argument("--searxng-url", default=os.environ.get("SEARXNG_URL"))
     ap.add_argument("--synth", choices=["auto", "extractive", "llm"], default="auto")
+    ap.add_argument("--llm-provider", choices=["auto", "anthropic", "openai", "openrouter"],
+                    default="auto", help="LLM backend for --synth llm")
+    ap.add_argument("--llm-model", default="",
+                    help="override model id (default: OPENROUTER_MODEL or nex-agi/nex-n2.5-pro:free)")
     ap.add_argument("--advanced", action="store_true", help="BGE cross-encoder rerank")
     ap.add_argument("--top-k", type=int, default=0, help="override fetch budget")
     ap.add_argument("--out", default="", help="write markdown answer to file")
@@ -135,16 +139,28 @@ def main():
         method = a.synth
         if method == "auto":
             method = ("llm" if os.environ.get("ANTHROPIC_API_KEY")
-                      or os.environ.get("OPENAI_API_KEY") else "extractive")
+                      or os.environ.get("OPENAI_API_KEY")
+                      or os.environ.get("OPENROUTER_API_KEY") else "extractive")
         if method == "llm":
             try:
-                body = synthesize.llm_rewrite(a.query, evidence)
+                body = synthesize.llm_rewrite(
+                    a.query, evidence, provider=a.llm_provider,
+                    model=a.llm_model or None)
                 bullets, claims = [body], []  # claims extracted below
-                import re
-                for m in re.finditer(r"[^.\n]*\d[^.\n]*\.", body):
-                    claims.append({"id": f"c{len(claims)+1}", "text": m.group(0),
-                                   "quote": " ".join(m.group(0).split()[:25]),
-                                   "url": (evidence[0]["url"] if evidence else "")})
+                import re as _re
+                for s in _re.split(r"(?<=[.!?])\s+", body):
+                    s = s.strip()
+                    if not s or not _re.search(r"\d", s):
+                        continue
+                    # strip markdown links so URL digits/labels can't
+                    # fragment claims or pollute the number check;
+                    # handles both [n](url) and [[n]](url)
+                    clean = _re.sub(r"!?\[(?:\[[^\]]*\]|[^\]]*)\]\([^)]*\)",
+                                    "", s).strip()
+                    if clean:
+                        claims.append({"id": f"c{len(claims)+1}", "text": clean,
+                                       "quote": " ".join(clean.split()[:25]),
+                                       "url": (evidence[0]["url"] if evidence else "")})
             except RuntimeError as e:
                 print(f"error: {e}", file=sys.stderr)
                 return 2
@@ -178,8 +194,8 @@ def main():
             lines += ["", "## Unverified (not cited as fact)", ""]
             lines += [f"- {u['text']}" for u in verdict["unverified"]]
         if method == "extractive" and not a.dry_run:
-            lines += ["", "_Extractive draft — set ANTHROPIC_API_KEY/OPENAI_API_KEY "
-                      "or --synth llm for fluent rewrite (re-verified)._"]
+            lines += ["", "_Extractive draft — set ANTHROPIC_API_KEY / OPENAI_API_KEY / "
+                      "OPENROUTER_API_KEY or --synth llm for fluent rewrite (re-verified)._"]
         dt = (datetime.datetime.now(datetime.timezone.utc) - t0).total_seconds()
         lines += ["", "## Provenance",
                   f"model=search-pro/1.0.1+{method} mode={a.mode} "
