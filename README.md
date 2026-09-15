@@ -177,6 +177,8 @@ Module-level usage (`scripts/rerank.py`, `scripts/verify-citations.py`) and the
 | `JINA_GAP` / `SEARCH_GAP` | No | Politeness delays (seconds) between remote calls | `3` / `1.0` |
 | `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `OPENROUTER_API_KEY` | `--synth llm` | Fluent rewrite backends (auto-detected in this order) | extractive |
 | `OPENROUTER_MODEL` | No | Override synthesis model | `nex-agi/nex-n2.5-pro:free` |
+| `OPENROUTER_REASONING_EFFORT` | No | Opt-in reasoning effort (`max\|xhigh\|high\|medium\|low\|minimal`); unset = off (avoids `encrypted_content` upstream errors) | unset (off) |
+| `OPENROUTER_MAX_EVIDENCE_CHARS` / `OPENROUTER_MAX_QUERY_CHARS` | No | Truncate evidence/query per LLM call (large pastes trigger gateway failover) | `12000` / `2000` |
 
 Secrets live in the environment only. The repository is secret-scanned before
 every commit; no key has ever been committed (verified in CI-equivalent local gate).

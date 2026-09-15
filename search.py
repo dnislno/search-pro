@@ -21,6 +21,8 @@ import providers
 from fetch import fetch
 import synthesize
 
+VERSION = "2.3.1"
+
 BUDGETS = {
     "best": {"queries": 4, "per_query": 5, "fetch": 4},
     "pro": {"queries": 8, "per_query": 6, "fetch": 8},
@@ -62,6 +64,10 @@ def main():
                     default="auto", help="LLM backend for --synth llm")
     ap.add_argument("--llm-model", default="",
                     help="override model id (default: OPENROUTER_MODEL or nex-agi/nex-n2.5-pro:free)")
+    ap.add_argument("--reasoning-effort", default="",
+                    help="opt-in OpenRouter reasoning effort "
+                         "(max|xhigh|high|medium|low|minimal; default: off). "
+                         "Also via OPENROUTER_REASONING_EFFORT env")
     ap.add_argument("--advanced", action="store_true", help="BGE cross-encoder rerank")
     ap.add_argument("--top-k", type=int, default=0, help="override fetch budget")
     ap.add_argument("--out", default="", help="write markdown answer to file")
@@ -153,7 +159,8 @@ def main():
             try:
                 body = synthesize.llm_rewrite(
                     a.query, evidence, provider=a.llm_provider,
-                    model=a.llm_model or None)
+                    model=a.llm_model or None,
+                    reasoning_effort=a.reasoning_effort or None)
                 bullets, claims = [body], []  # claims extracted below
                 import re as _re
                 for s in _re.split(r"(?<=[.!?])\s+", body):
@@ -241,7 +248,7 @@ def main():
                       "OPENROUTER_API_KEY or --synth llm for fluent rewrite (re-verified)._"]
         dt = (datetime.datetime.now(datetime.timezone.utc) - t0).total_seconds()
         lines += ["", "## Provenance",
-                  f"model=search-pro/1.0.1+{method} mode={a.mode} "
+                  f"model=search-pro/{VERSION}+{method} mode={a.mode} "
                   f"provider={a.provider} queries={len(queries)} "
                   f"fetched={len(evidence)} verified={verdict['stats'].get('verified', len(verdict['verified']))}/{len(claims)} "
                   f"pass_rate={verdict['stats']['pass_rate']} elapsed={dt:.1f}s "
