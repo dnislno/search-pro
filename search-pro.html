@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Search-Pro Web — mesin pencari AI yang bisa diverifikasi</title>
+<style>
+  :root { --bg:#0f141b; --card:#182029; --line:#26313d; --txt:#e8eef4;
+          --mut:#93a1b0; --acc:#4cc38a; --warn:#e5b567; --bad:#e56b6b; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--txt);
+         font:15px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  header { padding:22px 18px 6px; max-width:900px; margin:0 auto; }
+  header h1 { margin:0 0 4px; font-size:24px; }
+  header p { margin:0; color:var(--mut); }
+  main { max-width:900px; margin:0 auto; padding:12px 18px 60px; }
+  .card { background:var(--card); border:1px solid var(--line);
+          border-radius:12px; padding:16px; margin:12px 0; }
+  textarea, input[type=text], input[type=password], select {
+    width:100%; background:#0d1319; color:var(--txt);
+    border:1px solid var(--line); border-radius:8px; padding:10px; font-size:14px; }
+  textarea { min-height:76px; resize:vertical; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; margin-top:10px; }
+  .row > * { flex:1 1 140px; }
+  button { background:var(--acc); color:#06281b; border:0; border-radius:8px;
+           padding:10px 18px; font-weight:700; font-size:14px; cursor:pointer; }
+  button:disabled { opacity:.5; cursor:wait; }
+  button.ghost { background:transparent; color:var(--acc);
+                 border:1px solid var(--acc); }
+  details { margin-top:10px; }
+  summary { cursor:pointer; color:var(--mut); }
+  label { display:block; font-size:13px; color:var(--mut); margin:8px 0 4px; }
+  #log { font:12px/1.7 ui-monospace,Consolas,monospace; color:var(--mut);
+         white-space:pre-wrap; max-height:220px; overflow:auto; }
+  #answer { font-size:15px; }
+  #answer a { color:var(--acc); }
+  h2.sec { font-size:17px; margin:18px 0 8px; }
+  ul.tight { margin:6px 0; padding-left:20px; }
+  li { margin:4px 0; }
+  .pill { display:inline-block; font-size:12px; padding:2px 10px; border-radius:20px;
+          border:1px solid var(--line); color:var(--mut); margin-right:6px; }
+  .ok { color:var(--acc); } .bad { color:var(--bad); } .wn { color:var(--warn); }
+  .warnbox { border:1px solid var(--warn); border-radius:10px; padding:12px 14px;
+             color:var(--warn); font-size:13px; margin:12px 0; }
+  footer { max-width:900px; margin:0 auto; padding:0 18px 40px; color:var(--mut);
+           font-size:12px; }
+  code { background:#0d1319; padding:1px 6px; border-radius:6px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Search-Pro Web</h1>
+  <p>Retrieval → rerank → fetch → verifikasi sitasi. Tanpa sumber, tanpa klaim.</p>
+</header>
+<main>
+  <div class="card">
+    <label for="q">Pertanyaan</label>
+    <textarea id="q" placeholder="cth: Berapa harga beras 2026 per kilogram?"></textarea>
+    <div class="row">
+      <div><label for="mode">Mode</label>
+        <select id="mode">
+          <option value="best">best — cepat (4 query)</option>
+          <option value="pro" selected>pro — seimbang (8 query)</option>
+          <option value="research">research — mendalam (12 query)</option>
+        </select></div>
+      <div><label for="synth">Sintesis</label>
+        <select id="synth">
+          <option value="extractive">extractive — offline, deterministik</option>
+          <option value="llm" selected>llm — luwes via OpenRouter (diverifikasi ulang)</option>
+        </select></div>
+    </div>
+    <div class="row">
+      <button id="go">Cari &amp; jawab</button>
+      <button id="demo" class="ghost">Isi contoh</button>
+    </div>
+    <details>
+      <summary>Pengaturan lanjutan</summary>
+      <label for="key">OpenRouter API key (tersimpan hanya di browser ini)</label>
+      <input type="password" id="key" autocomplete="off">
+      <div class="row">
+        <button id="savekey" class="ghost">Simpan key</button>
+        <button id="clearkey" class="ghost">Hapus key</button>
+      </div>
+      <label for="searxng">SearXNG URL sendiri (opsional, cth: http://localhost:8888)</label>
+      <input type="text" id="searxng" placeholder="kosongkan bila tidak punya">
+      <label for="custom">URL tambahan (opsional, satu per baris — diambil via reader)</label>
+      <textarea id="custom" style="min-height:48px" placeholder="https://contoh.go.id/berita/..."></textarea>
+    </details>
+  </div>
+
+  <div class="warnbox" id="keywarn">
+    Key di bawah sudah terisi agar langsung bisa dipakai. Siapa pun yang memegang
+    file ini bisa memakai kuotamu — sebelum dibagikan, tekan <b>Hapus key</b>
+    (tiap orang memakai key gratis miliknya sendiri), atau buat key khusus
+    berlimit di dashboard OpenRouter. Key yang pernah ditempel di chat wajib dirotasi.
+  </div>
+
+  <div class="card"><div id="log">Siap. Tulis pertanyaan lalu tekan “Cari &amp; jawab”.</div></div>
+  <div class="card" id="res" style="display:none">
+    <div id="meta"></div>
+    <h2 class="sec">Jawaban</h2><div id="answer"></div>
+    <h2 class="sec" id="hconf" style="display:none">Laporan konflik</h2><div id="conf"></div>
+    <h2 class="sec">Sumber</h2><div id="sources"></div>
+    <h2 class="sec" id="hunv" style="display:none">Belum terverifikasi (bukan fakta)</h2><div id="unv"></div>
+    <h2 class="sec">Provenance</h2><div id="prov" style="color:var(--mut);font-size:13px"></div>
+  </div>
+</main>
+<footer>
+  Search-Pro Web · port browser dari pipeline search-pro (plan → fan-out → rerank →
+  fetch → verifikasi → sintesis). Klaim angka/tanggal/kutipan lolos hanya bila
+  verbatim di halaman yang dibaca penuh; sisanya masuk Unverified.
+</footer>
+
+<script>
+"use strict";
+/* ================= konfigurasi ================= */
+/* Key diisi di aplikasi (tersimpan di browser masing-masing), bukan di file,
+   agar file ini aman dibagikan. Dapatkan gratis di https://openrouter.ai/keys */
+const EMBEDDED_KEY = "";
+const MODEL = "nex-agi/nex-n2.5-pro:free";
+const OR_URL = "https://openrouter.ai/api/v1/chat/completions";
+const BUDGETS = {
+  best:     { queries: 4,  perQuery: 5, fetch: 4, loops: 0 },
+  pro:      { queries: 8,  perQuery: 6, fetch: 8, loops: 1 },
+  research: { queries: 12, perQuery: 8, fetch: 10, loops: 2 },
+};
+const MIN_VERIFIED_STOP = 8, MAX_UNVER_RATIO = 0.25;
+
+/* ================= util murni (bisa diuji di node) ================= */
+function tokens(s) {
+  return ((s || "").toLowerCase().match(/[a-z0-9]{3,}/g) || []);
+}
+const ID_MARKERS = new Set(
+  "yang dan harga berapa jumlah daftar terbaru penduduk rupiah indonesia vs tren".split(" "));
+function detectIntent(query) {
+  const q = (query || "").toLowerCase();
+  const has = (re) => re.test(q);
+  return {
+    isCompare: has(/\b(vs|versus|bandingkan|dibanding|perbandingan|compar\w*)\b/),
+    isNumeric: has(/\b(berapa|harga|jumlah|total|ukuran|size|price|cost|fine|denda|statistic|data|angka|persen|percent)\b/),
+    isFresh: has(/\b(terbaru|latest|update|sekarang|current|202[5-9])\b/),
+    isAcademic: has(/\b(paper|studi|penelitian|jurnal|research|study|thesis)\b/),
+    lang: q.split(/\s+/).some((w) => ID_MARKERS.has(w)) ? "id" : "en",
+  };
+}
+function planQueries(query, mode) {
+  const budget = BUDGETS[mode].queries;
+  const intent = detectIntent(query);
+  const year = String(new Date().getFullYear());
+  const v = [query];
+  const imp = ((query || "").match(/[A-Za-z0-9]{4,}/g) || [])
+    .filter((w) => w.length > 4).slice(0, 5);
+  if (imp.length) v.push('"' + imp.slice(0, 3).join(" ") + '"');
+  v.push(query + " " + year, query + " " + (Number(year) - 1));
+  if (imp.length) v.push('"' + imp.slice(0, 3).join(" ") + '" ' + year);
+  if (intent.isNumeric) v.push(query + " data OR statistics OR angka OR jumlah",
+                               query + " official OR report OR laporan");
+  else v.push(query + " statistics OR data");
+  if (intent.isCompare) v.push(query + " comparison OR vs OR perbedaan");
+  if (intent.isAcademic) v.push(query + " study OR paper OR research OR jurnal");
+  if (intent.isFresh) v.push(query + " after:" + (Number(year) - 1));
+  if (intent.lang === "id") {
+    v.push(query + " site:go.id OR site:ac.id OR site:edu",
+           query + " site:go.id",
+           query + " site:bps.go.id OR site:kemenkeu.go.id OR site:bi.go.id");
+  } else {
+    v.push(query + " site:gov OR site:edu OR site:org",
+           query + " site:gov", query + " official report");
+  }
+  v.push(query + " terbaru OR latest OR update",
+         query + " filetype:pdf OR pdf",
+         query + " explained OR analysis OR dibahas",
+         query + " news OR berita OR kabar");
+  const seen = new Set(), clean = [];
+  for (const x of v) {
+    const k = x.toLowerCase().trim();
+    if (!seen.has(k)) { seen.add(k); clean.push(x); }
+  }
+  for (const sfx of ["overview", "faq", "wiki", "history OR sejarah",
+                     "definition OR definisi"]) {
+    if (clean.length >= budget) break;
+    const c = query + " " + sfx;
+    if (!seen.has(c.toLowerCase())) { seen.add(c.toLowerCase()); clean.push(c); }
+  }
+  return clean.slice(0, budget);
+}
+function normalizeUrl(u) {
+  return (u || "").trim().replace(/\/$/, "").toLowerCase()
+    .replace(/^https?:\/\/(www\.)?/, "").replace(/[?#].*$/, "");
+}
+const TRUSTED = [".go.id", ".ac.id", ".edu", "arxiv.org", "nature.com",
+  "ieee.org", "wikipedia.org", "github.com", "docs.python.org"];
+const BLOCKED = ["pinterest.", "shopee.", "tokopedia.", "spam", "judi", "slot,"];
+function heuristicScore(query, c) {
+  const q = new Set(tokens(query));
+  const text = (c.title || "") + " " + (c.snippet || "");
+  const t = tokens(text);
+  const overlap = t.filter((x) => q.has(x)).length / Math.max(1, q.size);
+  let host = "";
+  try { host = new URL("https://" + normalizeUrl(c.url)).hostname || ""; }
+  catch (e) { host = ""; }
+  const trust = TRUSTED.some((d) => host.endsWith(d)) ? 1 : 0;
+  const noise = BLOCKED.some((b) => (c.url || "").toLowerCase().includes(b)) ? -1 : 0;
+  const fresh = /202[5-9]|2026/.test(text) ? 0.3 : 0;
+  const lenPen = text.length < 80 ? -0.2 : 0;
+  return Math.round((3 * overlap + 2 * trust + fresh + noise + lenPen) * 1e4) / 1e4;
+}
+function pickSentences(query, text, k) {
+  k = k || 5;
+  const q = new Set(tokens(query));
+  const qFigs = new Set((query.match(/\d[\d.,]*/g) || []).map((m) => m.replace(/\D/g, "")));
+  qFigs.delete("");
+  const out = [];
+  for (const raw of (text || "").split(/(?<=[.!?])\s+/)) {
+    const s = raw.trim();
+    if (s.length < 40 || s.length > 600) continue;
+    const t = tokens(s);
+    const overlap = t.filter((x) => q.has(x)).length / Math.max(1, q.size);
+    const sFigs = new Set((s.match(/\d[\d.,]*/g) || []).map((m) => m.replace(/\D/g, "")));
+    sFigs.delete("");
+    const figBonus = [...sFigs].some((f) => qFigs.has(f)) ? 0.4 : 0;
+    const hasNum = /\d/.test(s) ? 0.15 : 0;
+    const genPen = new Set(t).size < 6 ? -0.3 : 0;
+    out.push({ score: 2.5 * overlap + figBonus + hasNum + genPen, len: s.length, s });
+  }
+  out.sort((a, b) => (b.score - a.score) || (a.len - b.len));
+  return out.slice(0, k).map((o) => o.s);
+}
+function normFig(f) { return (f || "").replace(/\D/g, ""); }
+function extractFigures(text, limit) {
+  limit = limit || 6;
+  const re = /\$\s?\d[\d.,]*\s?(?:million|billion|m\b|b\b)?|\d[\d.,]*\s?(?:%|percent|million|billion|miliar|juta|km|mAh|kg|triliun|second(?:s)?|detik|minute(?:s)?|menit|hour(?:s)?|jam|point(?:s)?|poin|vote(?:s)?|suara|goal(?:s)?|gol|match(?:es)?)|\b\d{3,}(?:[\d.,]*\d)?\b/gi;
+  const out = [], seen = new Set();
+  for (const m of (text || "").match(re) || []) {
+    const n = normFig(m);
+    if (n && !seen.has(n) && n.length <= 12) {
+      seen.add(n); out.push(m.trim());
+      if (out.length >= limit) break;
+    }
+  }
+  return out;
+}
+function bodyHasFigure(text, target, limit) {
+  if (!target) return false;
+  return extractFigures(text || "", limit || 500)
+    .some((m) => normFig(m) === target);
+}
+function hostOf(url) {
+  try {
+    const h = new URL(url).hostname.toLowerCase();
+    return h.startsWith("www.") ? h.slice(4) : h;
+  } catch (e) { return ""; }
+}
+const SOCIAL = ["x.com", "twitter.com", "facebook.com", "instagram.com",
+  "tiktok.com", "youtube.com", "reddit.com", "linkedin.com",
+  "threads.net", "bsky.app"];
+const DERIV = SOCIAL.concat(["blogspot", "wordpress.com", "medium.com",
+  "msn.com", "yahoo.com", "aol.com", "tumblr.com"]);
+const PRIMARY_ENDS = [".gov", ".go.id", ".edu", ".ac.id", ".mil", ".int",
+  ".sch.id", ".or.id"];
+const PRIMARY_HOSTS = ["arxiv.org", "nature.com", "science.org", "ieee.org",
+  "acm.org", "who.int", "worldbank.org", "imf.org"];
+function domMatch(h, d) { d = d.replace(/\.$/, ""); return h === d || h.endsWith("." + d); }
+function originOf(url, text) {
+  const h = hostOf(url);
+  if (DERIV.some((d) => domMatch(h, d))) return "pointer:" + h;
+  const low = ((text || "").toLowerCase()).slice(0, 3000);
+  const wires = ["reuters.com", "apnews.com", "afp.com", "bloomberg.com"];
+  for (const w of wires) if (h.includes(w)) return "wire:" + w;
+  const marks = ["according to reuters", "according to the associated press",
+    "according to bloomberg", "according to afp"];
+  for (let i = 0; i < marks.length; i++)
+    if (low.includes(marks[i])) return "wire:" + wires[i % wires.length];
+  return "pub:" + h;
+}
+function reliability(url) {
+  const h = hostOf(url);
+  if (PRIMARY_ENDS.some((e) => h.endsWith(e)) || PRIMARY_HOSTS.includes(h))
+    return "primary";
+  if (originOf(url, "").startsWith("pointer:")) return "derivative";
+  return "secondary";
+}
+const AUTH_PTS = { primary: 2, secondary: 1, derivative: 0 };
+function diversityReport(urls) {
+  const list = (urls || []).filter(Boolean);
+  const origins = {}, tiers = { primary: 0, secondary: 0, derivative: 0 };
+  for (const u of list) {
+    const o = originOf(u, "");
+    origins[o] = (origins[o] || 0) + 1;
+    tiers[reliability(u)] += 1;
+  }
+  const n = list.length;
+  const top = n ? Math.max(...Object.values(origins)) / n : 0;
+  const ptr = n ? list.filter((u) => originOf(u, "").startsWith("pointer:")).length / n : 0;
+  const mean = n ? list.reduce((a, u) => a + AUTH_PTS[reliability(u)], 0) / n : 0;
+  return { nSources: n, nPublishers: Object.keys(origins).length,
+           authority: tiers, authorityMean: Math.round(mean * 1e3) / 1e3,
+           pointerRatio: Math.round(ptr * 1e3) / 1e3,
+           topShare: Math.round(top * 1e3) / 1e3 };
+}
+const MARKER_RE = /\[\[(\d+)\]\]\([^)]*\)|\[(\d+)\]\([^)]*\)/g;
+const MD_LINK_RE = /!?\[(?:\[[^\]]*\]|[^\]]*)\]\([^)]*\)/g;
+function bestEvidence(text, evidence) {
+  if (!evidence.length) return null;
+  const q = new Set(tokens(text));
+  const qFigs = new Set(((text || "").match(/\d[\d.,]*/g) || [])
+    .map((m) => m.replace(/\D/g, "")));
+  qFigs.delete("");
+  let best = null, bestSc = -1;
+  for (const ev of evidence) {
+    const doc = (ev.chunks || []).join(" ");
+    const t = new Set(tokens(doc));
+    const overlap = [...q].filter((x) => t.has(x)).length / Math.max(1, q.size);
+    const dFigs = new Set(((doc.match(/\d[\d.,]*/g)) || [])
+      .map((m) => m.replace(/\D/g, "")));
+    dFigs.delete("");
+    const sc = overlap + ([...qFigs].some((f) => dFigs.has(f)) ? 1 : 0);
+    if (sc > bestSc) { bestSc = sc; best = ev; }
+  }
+  return best;
+}
+function attributeClaims(body, evidence) {
+  const byN = {};
+  for (const e of evidence || []) byN[e.n] = e;
+  const claims = [];
+  for (const raw of (body || "").split(/(?<=[.!?])\s+/)) {
+    const s = raw.trim();
+    if (!s || !/\d/.test(s)) continue;
+    MARKER_RE.lastIndex = 0;
+    const markers = [];
+    let m;
+    while ((m = MARKER_RE.exec(s))) markers.push(Number(m[1] || m[2]));
+    const clean = s.replace(MD_LINK_RE, "").trim();
+    if (!clean) continue;
+    let ev = null;
+    for (const n of markers) if (byN[n]) { ev = byN[n]; break; }
+    if (!ev) ev = bestEvidence(clean, evidence);
+    if (!ev) continue;
+    claims.push({ id: "c" + (claims.length + 1), text: clean,
+      quote: clean.split(/\s+/).slice(0, 25).join(" "),
+      url: ev.url || "", file: ev.file || "" });
+  }
+  return claims;
+}
+const CONFLICT_RE = /(\d[\d.,]*)\s*(%|percent|persen|million|billion|miliar|juta|triliun|kg|km|mAh|rupiah|\brp\b|usd|\$|votes?|suara|points?|poin|seats?|kursi)/gi;
+const MONTHS = new Set(("januari februari maret april mei juni juli agustus september oktober november desember jan feb mar apr may jun jul aug sep oct nov dec january february march april june july august october").split(" "));
+function anchorsOf(text) {
+  const toks = (text || "").match(/[A-Za-z][A-Za-z0-9.]*/g) || [];
+  const out = new Set();
+  toks.forEach((t, i) => {
+    if (i === 0 || t.length < 2) return;
+    if (!(t[0] === t[0].toUpperCase() && t[0] !== t[0].toLowerCase()) &&
+        !/[A-Z]/.test(t.slice(1))) return;
+    const low = t.toLowerCase().replace(/\.$/, "");
+    if (!MONTHS.has(low)) out.add(low);
+  });
+  return out;
+}
+function detectConflicts(verified, limit) {
+  limit = limit || 5;
+  const groups = {};
+  for (const cl of verified || []) {
+    const text = cl.text || "";
+    const anch = anchorsOf(text);
+    CONFLICT_RE.lastIndex = 0;
+    let m;
+    while ((m = CONFLICT_RE.exec(text))) {
+      const norm = normFig(m[1]);
+      if (!norm || /^(19|20)\d{2}$/.test(norm)) continue;
+      const key = m[2].toLowerCase().replace("$", "usd");
+      groups[key] = groups[key] || {};
+      const prev = groups[key][norm];
+      groups[key][norm] = prev ? [prev[0], new Set([...prev[1], ...anch])]
+                               : [text, anch];
+    }
+  }
+  const out = [];
+  for (const unit of Object.keys(groups)) {
+    const items = Object.entries(groups[unit]);
+    const rivals = [];
+    const have = (v) => rivals.some((r) => r.value === v);
+    for (let i = 0; i < items.length; i++) {
+      for (let j = i + 1; j < items.length; j++) {
+        const [ni, [ti, ai]] = items[i], [nj, [tj, aj]] = items[j];
+        if (ni === nj) continue;
+        const shared = [...ai].some((x) => aj.has(x));
+        if (shared || (!ai.size && !aj.size)) {
+          if (!have(ni)) rivals.push({ value: ni, text: ti });
+          if (!have(nj)) rivals.push({ value: nj, text: tj });
+        }
+      }
+    }
+    if (rivals.length) {
+      out.push({ unit, values: rivals.slice(0, 3) });
+      if (out.length >= limit) break;
+    }
+  }
+  return out;
+}
+function applyGate(verdict, claims, evidence, bodies) {
+  // v2.6.1: bare years never count as backing.
+  const f2u = {};
+  for (const e of evidence) f2u[e.file] = e.url;
+  const cfile = {};
+  for (const c of claims) cfile[c.id] = c._file || "";
+  const keep = [], drop = [];
+  for (const v of verdict.verified || []) {
+    const ownFn = cfile[v.id] || "";
+    if (originOf(f2u[ownFn] || "", "").startsWith("pointer:")) {
+      const figs = new Set(extractFigures(v.text || "")
+        .map(normFig).filter((n) => n && !/^(19|20)\d{2}$/.test(n)));
+      let backed = false;
+      for (const fn of Object.keys(bodies)) {
+        if (fn === ownFn) continue;
+        if (originOf(f2u[fn] || "", "").startsWith("pointer:")) continue;
+        if ([...figs].some((n) => bodyHasFigure(bodies[fn], n))) { backed = true; break; }
+      }
+      if (!backed) { v.gate = "demoted:pointer-without-backing"; drop.push(v); continue; }
+    }
+    keep.push(v);
+  }
+  const n = claims.length;
+  return { verdict: { verified: keep, unverified: drop.concat(verdict.unverified || []),
+           stats: { n, verified: keep.length,
+                    unverified: drop.length + (verdict.unverified || []).length,
+                    passRate: Math.round(keep.length / Math.max(1, n) * 1e3) / 1e3 } },
+           demoted: drop.length };
+}
+function generateFollowups(query, verdict, intent, seen, limit) {
+  limit = limit || 4;
+  const year = String(new Date().getFullYear());
+  const cand = [];
+  const unv = (verdict && verdict.unverified) || [];
+  if (unv.some((u) => String(u.gate || "").includes("pointer")))
+    cand.push(query + " official source OR government OR report");
+  if (intent.isNumeric) cand.push(query + " statistics OR data OR angka resmi");
+  if (intent.isCompare) cand.push(query + " vs comparison review terbaru");
+  cand.push(query + " " + year + " latest update",
+            query + " official OR laporan OR announcement");
+  const out = [];
+  for (const q of cand) {
+    if (!seen.has(q.toLowerCase())) { seen.add(q.toLowerCase()); out.push(q); }
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+function extractiveBullets(evidence) {
+  const bullets = [], claims = [];
+  for (const ev of evidence) {
+    for (const s of ev.chunks || []) {
+      bullets.push("- " + s + " [[" + ev.n + "]](" + ev.url + ")");
+      claims.push({ id: "c" + (claims.length + 1), text: s,
+        quote: s.split(/\s+/).slice(0, 25).join(" "),
+        url: ev.url, file: ev.file });
+    }
+  }
+  return { bullets, claims };
+}
+
+/* ================= jaringan (browser) ================= */
+async function fetchTimeout(url, opts, ms) {
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), ms || 25000);
+  try {
+    const r = await fetch(url, Object.assign({}, opts, { signal: ctl.signal }));
+    return r;
+  } finally { clearTimeout(t); }
+}
+async function wikiSearch(q, lang, limit) {
+  const u = "https://" + lang + ".wikipedia.org/w/api.php?action=query" +
+    "&generator=search&gsrsearch=" + encodeURIComponent(q) +
+    "&gsrlimit=" + (limit || 5) +
+    "&prop=extracts|info&exintro&explaintext&inprop=url&format=json&origin=*";
+  const r = await fetchTimeout(u, {}, 20000);
+  if (!r.ok) throw new Error("wiki http " + r.status);
+  const d = await r.json();
+  const pages = (d.query && d.query.pages) || {};
+  return Object.values(pages).map((p) => ({
+    title: p.title || "", url: p.fullurl || "",
+    snippet: (p.extract || "").slice(0, 600), text: p.extract || "",
+    via: "wikipedia-api" }));
+}
+async function ddgSearch(q, limit) {
+  const u = "https://api.duckduckgo.com/?q=" + encodeURIComponent(q) +
+    "&format=json&no_html=1&skip_disambig=1";
+  const r = await fetchTimeout(u, {}, 15000);
+  if (!r.ok) throw new Error("ddg http " + r.status);
+  const d = await r.json();
+  const out = [];
+  const walk = (arr) => {
+    for (const t of arr || []) {
+      if (t.Topics) walk(t.Topics);
+      else if (t.FirstURL && t.Text)
+        out.push({ title: (t.Text || "").slice(0, 120), url: t.FirstURL,
+                   snippet: t.Text || "", text: "", via: "ddg-abstract" });
+    }
+  };
+  walk(d.RelatedTopics);
+  if (d.AbstractURL && d.AbstractText)
+    out.unshift({ title: (d.Heading || d.AbstractText).slice(0, 120),
+      url: d.AbstractURL, snippet: d.AbstractText, text: "", via: "ddg-abstract" });
+  return out.slice(0, limit || 5);
+}
+async function searxngSearch(q, base, limit, lang) {
+  const u = base.replace(/\/$/, "") + "/search?q=" + encodeURIComponent(q) +
+    "&format=json&language=" + (lang || "auto");
+  const r = await fetchTimeout(u, {}, 20000);
+  if (!r.ok) throw new Error("searxng http " + r.status);
+  const d = await r.json();
+  return ((d.results || []).slice(0, limit || 5)).filter((x) => x.url).map((x) => ({
+    title: x.title || "", url: x.url, snippet: x.content || "",
+    text: "", via: "searxng" }));
+}
+async function jinaFetch(url) {
+  const r = await fetchTimeout("https://r.jina.ai/" + url, {}, 40000);
+  if (!r.ok) throw new Error("jina http " + r.status);
+  let body = await r.text();
+  body = body.split("\n").filter((ln) =>
+    !/^(Title:|URL Source:|Published |Markdown Content:)/.test(ln)).join("\n");
+  const text = body.replace(/\s+/g, " ").trim();
+  if (text.length < 300) throw new Error("reader too short");
+  return text.slice(0, 20000);
+}
+async function llmRewrite(query, evidence, style, key) {
+  // NOTE: tidak ada field "reasoning" di payload. Alasannya terdokumentasi:
+  // hardcoded reasoning=high pernah memicu error upstream
+  // "reasoning encrypted_content was not issued to this caller" (v2.3.1).
+  const evTxt = evidence.map((e) =>
+    "[" + e.n + "] " + e.title + " " + e.url + "\n" + e.chunks.join("\n")).join("\n")
+    .slice(0, 12000);
+  const sys = style === "structured"
+    ? ("Rewrite the evidence as a cited answer in the user's language, using ONLY the evidence. "
+       + "Keep every [[n]](url) marker attached to its claim. No new numbers, dates, or quotes. "
+       + "Sections: 1) Key findings. 2) Numbers with sources. 3) Conflicts / uncertainties. "
+       + "4) What is still unknown.")
+    : ("Rewrite the evidence as a concise cited answer in the user's language. "
+       + "Use ONLY the evidence. Keep every [[n]](url) marker attached to its claim. "
+       + "No new numbers, dates, or quotes beyond the evidence.");
+  const r = await fetchTimeout(OR_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json",
+      "Authorization": "Bearer " + key,
+      "HTTP-Referer": (typeof location !== "undefined" ? location.href : "https://github.com/dnislno/search-pro"),
+      "X-Title": "search-pro-web" },
+    body: JSON.stringify({ model: MODEL, max_tokens: 2000,
+      messages: [{ role: "system", content: sys },
+                 { role: "user", content: "Question: " + query.slice(0, 2000) +
+                                          "\n\nEvidence:\n" + evTxt }] }),
+  }, 90000);
+  if (!r.ok) {
+    let msg = "http " + r.status;
+    try { const e = await r.json(); msg = (e.error && e.error.message) || msg; }
+    catch (e2) { /* pakai status */ }
+    throw new Error("OpenRouter: " + String(msg).slice(0, 300));
+  }
+  const d = await r.json();
+  const content = d && d.choices && d.choices[0] && d.choices[0].message
+    ? (d.choices[0].message.content || "") : "";
+  if (!content.trim()) throw new Error("OpenRouter: respons kosong.");
+  return content;
+}
+
+/* ================= orkestrasi + UI (browser saja) ================= */
+const $ = (id) => document.getElementById(id);
+function log(msg) {
+  const el = $("log");
+  el.textContent += (el.textContent.endsWith("Siap.") ? "\n" : "") + "[web] " + msg + "\n";
+  el.scrollTop = el.scrollHeight;
+}
+function esc(s) {
+  return String(s == null ? "" : s).replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+function mdLite(s) {
+  let h = esc(s);
+  h = h.replace(/\[\[(\d+)\]\]\((https?:[^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">[$1]</a>');
+  h = h.replace(/\[(\d+)\]\((https?:[^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">[$1]</a>');
+  h = h.replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
+  h = h.split("\n").map((ln) =>
+    ln.startsWith("- ") ? "<li>" + ln.slice(2) + "</li>"
+    : ln.startsWith("## ") ? "<b>" + ln.slice(3) + "</b>"
+    : ln).join("<br>");
+  return h;
+}
+async function runPipeline(query, mode, synthMode, key, searxng, customUrls, onlog) {
+  const t0 = Date.now();
+  const B = BUDGETS[mode];
+  const intent = detectIntent(query);
+  const seenUrls = new Set(), seenQ = new Set();
+  const urlToFile = {}, urlToTitle = {}, bodies = {}, fetched = {};
+  let docIdx = 0, loopsUsed = 0, rerankMethod = "heuristic-v1";
+  let bullets = [], claims = [], evidence = [];
+  let verdict = { verified: [], unverified: [], stats: { passRate: 0 } };
+  let demoted = 0, followupsAll = [], allQueries = [];
+  const say = onlog || (() => {});
+  for (let loop = 0; loop <= B.loops; loop++) {
+    loopsUsed = loop + 1;
+    let queries;
+    if (loop === 0) {
+      queries = planQueries(query, mode);
+      say("direncanakan " + queries.length + " query (mode=" + mode + ")");
+    } else {
+      queries = generateFollowups(query, verdict, intent, seenQ);
+      if (!queries.length) { say("loop " + loop + ": tanpa follow-up, stop"); loopsUsed = loop; break; }
+      followupsAll = followupsAll.concat(queries);
+      say("loop " + loop + ": " + queries.length + " follow-up");
+    }
+    allQueries = allQueries.concat(queries);
+    // fan-out: wikipedia (id+en) + duckduckgo + searxng opsional
+    let cands = [];
+    for (const q of queries) {
+      const jobs = [wikiSearch(q, intent.lang === "id" ? "id" : "en", 4)
+        .catch(() => []),
+        wikiSearch(q, intent.lang === "id" ? "en" : "id", 3).catch(() => []),
+        ddgSearch(q, 4).catch((e) => { say("ddg gagal: " + e.message); return []; })];
+      if (searxng)
+        jobs.push(searxngSearch(q, searxng, B.perQuery, "auto")
+          .catch((e) => { say("searxng gagal: " + e.message); return []; }));
+      const got = await Promise.all(jobs);
+      for (const g of got) cands = cands.concat(g);
+    }
+    if (loop === 0 && customUrls.length) {
+      for (const u of customUrls)
+        if (u && !cands.some((c) => normalizeUrl(c.url) === normalizeUrl(u)))
+          cands.push({ title: u, url: u, snippet: "", text: "", via: "custom" });
+    }
+    say("fan-out: " + cands.length + " kandidat");
+    // dedup + rerank
+    const seen = new Map();
+    for (const c of cands) {
+      const k = normalizeUrl(c.url);
+      if (k && !seen.has(k) && !seenUrls.has(c.url)) seen.set(k, c);
+    }
+    let uniq = [...seen.values()];
+    for (const c of uniq) c._score = heuristicScore(query, c);
+    uniq.sort((a, b) => b._score - a._score);
+    const ranked = uniq.slice(0, B.fetch);
+    say("rerank: " + ranked.length + " teratas (" + rerankMethod + ")");
+    // fetch via jina (teks penuh) atau snippet-only
+    let nNew = 0;
+    for (const c of ranked) {
+      if (seenUrls.has(c.url)) continue;
+      seenUrls.add(c.url);
+      urlToTitle[c.url] = c.title || "";
+      if (c.text && c.text.length >= 300) {
+        const fn = "doc" + (docIdx++) + ".md";
+        urlToFile[c.url] = fn; bodies[fn] = c.text;
+        fetched[c.url] = "ok"; nNew++;
+      } else {
+        try {
+          const text = await jinaFetch(c.url);
+          const fn = "doc" + (docIdx++) + ".md";
+          urlToFile[c.url] = fn; bodies[fn] = text;
+          fetched[c.url] = "ok"; nNew++;
+        } catch (e) {
+          fetched[c.url] = c.snippet ? "snippet-only" : "error";
+        }
+      }
+    }
+    say("fetch: +" + nNew + " ok (" + Object.keys(urlToFile).length + " dokumen)");
+    if (loop > 0 && nNew === 0) { say("loop " + loop + ": nihil baru, stop"); loopsUsed = loop; break; }
+    // evidence
+    evidence = [];
+    let n = 0;
+    for (const u of Object.keys(urlToFile)) {
+      n++;
+      evidence.push({ n, title: urlToTitle[u] || "", url: u,
+        file: urlToFile[u], chunks: pickSentences(query, bodies[urlToFile[u]]) });
+    }
+    // synthesize
+    if (synthMode === "llm") {
+      if (!key) throw new Error("Mode llm butuh OpenRouter API key (isi di Pengaturan).");
+      say("memanggil " + MODEL + " …");
+      const style = mode === "research" ? "structured" : "default";
+      const body = await llmRewrite(query, evidence, style, key);
+      claims = attributeClaims(body, evidence);
+      bullets = [body];
+    } else {
+      const ex = extractiveBullets(evidence);
+      bullets = ex.bullets; claims = ex.claims;
+    }
+    // verify: quote verbatim di korpus?
+    const corp = Object.values(bodies).join("\n");
+    const verified = [], unverified = [];
+    for (const cl of claims) {
+      (corp.includes(cl.quote) ? verified : unverified).push(cl);
+    }
+    verdict = { verified, unverified,
+      stats: { n: claims.length, verified: verified.length,
+               unverified: unverified.length,
+               passRate: Math.round(verified.length / Math.max(1, claims.length) * 1e3) / 1e3 } };
+    const g = applyGate(verdict, claims, evidence, bodies);
+    verdict = g.verdict; demoted = g.demoted;
+    const nv = verdict.verified.length, nu = verdict.unverified.length;
+    say("loop " + loop + ": verified=" + nv + " unverified=" + nu +
+        (demoted ? " demoted=" + demoted : ""));
+    if ((nv >= MIN_VERIFIED_STOP && nu / Math.max(1, nv + nu) < MAX_UNVER_RATIO) || loop === B.loops) break;
+  }
+  const conflicts = detectConflicts(verdict.verified);
+  const diversity = diversityReport(evidence.map((e) => e.url));
+  return { bullets, claims, evidence, verdict, demoted, conflicts, diversity,
+    loopsUsed, followupsAll, allQueries, fetched,
+    elapsed: Math.round((Date.now() - t0) / 100) / 10 };
+}
+function renderResult(query, mode, synthMode, r) {
+  $("res").style.display = "";
+  const v = r.verdict;
+  $("meta").innerHTML =
+    '<span class="pill">' + esc(mode) + '</span>' +
+    '<span class="pill">' + esc(synthMode) + '</span>' +
+    '<span class="pill">' + v.stats.verified + '/' + r.claims.length + ' terverifikasi</span>' +
+    (r.demoted ? '<span class="pill">' + r.demoted + ' demoted</span>' : "") +
+    (r.conflicts.length ? '<span class="pill">' + r.conflicts.length + ' konflik</span>' : "");
+  const show = r.bullets.length ? r.bullets : ["(tidak ada klaim — evidence terlalu tipis, menolak mengarang.)"];
+  $("answer").innerHTML = show.map((b) =>
+    "<p>" + mdLite(b.replace(/^- /, "")) + "</p>").join("");
+  if (r.conflicts.length) {
+    $("hconf").style.display = "";
+    $("conf").innerHTML = "<ul class='tight'>" + r.conflicts.map((cf) =>
+      "<li>unit <code>" + esc(cf.unit) + "</code>: " + cf.values.map((x) =>
+        "<b>" + esc(x.value) + "</b> — " + esc(x.text.slice(0, 140))).join("; ") + "</li>").join("") + "</ul>";
+  } else { $("hconf").style.display = "none"; $("conf").innerHTML = ""; }
+  $("sources").innerHTML = "<ul class='tight'>" + r.evidence.map((e) =>
+    "<li>" + e.n + ". <a href='" + esc(e.url) + "' target='_blank' rel='noopener'>" +
+    esc(e.title || e.url) + "</a> — " +
+    (r.fetched[e.url] === "ok" ? "<span class='ok'>read-full</span>"
+      : "<span class='wn'>" + esc(r.fetched[e.url] || "?") + "</span>") + "</li>").join("") + "</ul>";
+  if (v.unverified.length) {
+    $("hunv").style.display = "";
+    $("unv").innerHTML = "<ul class='tight'>" + v.unverified.map((u) =>
+      "<li>" + esc(u.text) + "</li>").join("") + "</ul>";
+  } else { $("hunv").style.display = "none"; $("unv").innerHTML = ""; }
+  const a = r.diversity.authority;
+  $("prov").textContent =
+    "model=search-pro-web/" + MODEL + " mode=" + mode +
+    " queries=" + r.allQueries.length + " fetched=" + r.evidence.length +
+    " verified=" + v.stats.verified + "/" + r.claims.length +
+    " demoted=" + r.demoted + " loops=" + r.loopsUsed +
+    " auth=" + a.primary + "/" + a.secondary + "/" + a.derivative +
+    " pubs=" + r.diversity.nPublishers +
+    " pass_rate=" + v.stats.passRate + " elapsed=" + r.elapsed + "s " +
+    new Date().toISOString();
+}
+function getKey() {
+  try {
+    const saved = localStorage.getItem("sp_openrouter_key");
+    if (saved) return saved;
+  } catch (e) { /* storage diblokir */ }
+  return EMBEDDED_KEY || "";
+}
+function boot() {
+  $("key").value = getKey();
+  $("demo").onclick = () => {
+    $("q").value = "Berapa harga beras 2026 per kilogram dan bagaimana stok Bulog?";
+  };
+  $("savekey").onclick = () => {
+    try { localStorage.setItem("sp_openrouter_key", $("key").value.trim()); }
+    catch (e) { /* abaikan */ }
+    log("key disimpan di browser ini.");
+  };
+  $("clearkey").onclick = () => {
+    $("key").value = "";
+    try { localStorage.removeItem("sp_openrouter_key"); } catch (e) { /* abaikan */ }
+    log("key dihapus dari form + storage. File ini tetap memuat key bawaan — " +
+        "jangan bagikan file tanpa mengganti key bawaan di kode.");
+  };
+  $("go").onclick = async () => {
+    const query = $("q").value.trim();
+    if (!query) { log("tulis pertanyaan dulu."); return; }
+    const mode = $("mode").value, synthMode = $("synth").value;
+    const key = $("key").value.trim();
+    const searxng = $("searxng").value.trim();
+    const customUrls = $("custom").value.split("\n").map((s) => s.trim()).filter(Boolean);
+    $("go").disabled = true;
+    $("res").style.display = "none";
+    log("pertanyaan: " + query.slice(0, 120));
+    if (synthMode === "llm")
+      log("mode llm: model gratis kadang antre 1–2 menit di OpenRouter, mohon tunggu…");
+    try {
+      const r = await runPipeline(query, mode, synthMode, key, searxng, customUrls, log);
+      renderResult(query, mode, synthMode, r);
+      log("selesai dalam " + r.elapsed + "s.");
+    } catch (e) {
+      log("GAGAL: " + (e && e.message ? e.message : e));
+    } finally { $("go").disabled = false; }
+  };
+}
+if (typeof document !== "undefined") boot();
+</script>
+</body>
+</html>
