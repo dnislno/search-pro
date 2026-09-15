@@ -31,13 +31,16 @@ User → Muse Spark Intent IR → Planner (≤4 steps) → Parallel web search
 3. **Verify hard** — `scripts/verify-citations.py` requires every numeric/date/quote claim to match the fetched body text (Haus-style deterministic check).
 4. **Synthesize honestly** — grounded-only generation with inline `[[n]](url)` citations and an `Unverified` section for anything unsupported (follow-ups + backfill loop on roadmap).
 
-## Measured behavior (live harness, 30 queries, pro mode — see `harness/REPORT-v2.0.0.md`)
+## Measured behavior (live harness, 30 queries, pro mode — see `harness/REPORT-v2.3.0.md`)
 
-- Citation faithfulness: **453/453 claims verified (1.000)** vs 0.659 Haus baseline ✅
-- Source accessibility: **163/228 fetches ok (0.715)** vs 0.787 Haus — ❌ the known free-tier retrieval gap
-- Volume: **median 15 verified claims/answer, 28/30 ≥6** ✅
-- Verdict: parity **not yet claimed** — honest numbers above; rerun harness after provider upgrade.
-- Fixture-tested: true claim passes as `verified-full-read`, fabricated claim rejected as `unverified` (see `examples/`)
+- Citation faithfulness: **645/664 claims verified (0.971)** vs 0.659 Haus baseline ✅
+- Source accessibility: **231/240 fetches ok (0.963)** vs 0.787 Haus — ✅ via keyed
+  reader fallback (direct alone would be 0.600); residual is login-walled paywalls
+- Volume: **median 23 verified claims/answer, 30/30 ≥6** ✅
+- Study re-run (3 adversarial prompts): no score regressions; sourced refusals
+  where evidence is thin — full account in [STUDY-CASE.md](STUDY-CASE.md)
+- Fixture-tested: true claim passes as `verified-full-read`, fabricated claim
+  rejected as `unverified` (see `examples/`)
 
 ## Quickstart — one command, local
 

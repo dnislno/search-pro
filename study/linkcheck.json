@@ -1,7 +1,7 @@
 {
   "P1": [
     {
-      "url": "https://en.wikipedia.org/wiki/Sushi",
+      "url": "https://internasional.kontan.co.id/news/meta-dijatuhi-denda-us-13-miliar-akibat-persoalan-transfer-data-pengguna",
       "http": 200,
       "live": true
     },
@@ -12,6 +12,22 @@
     },
     {
       "url": "https://news.ddtc.co.id/berita/daerah/1812413/trump-pangkas-bea-masuk-atas-barang-uni-eropa-dari-25-ke-15",
+      "http": 200,
+      "live": true
+    },
+    {
+      "url": "https://repository.bakrie.ac.id/12737/3/REVISI%20GAGASAN%20AKADEMISI%20MAROON%20UNTUK%20NEGERI.pdf",
+      "http": 200,
+      "live": true
+    },
+    {
+      "url": "https://www.academia.edu/164723745/DIGITAL_CITIZENSHIP_Menjadi_Warga_di_Ruang_Maya_1",
+      "http": null,
+      "live": false,
+      "err": "HTTP Error 403: Forbidden"
+    },
+    {
+      "url": "https://www.facebook.com/antaranewsdotcom/posts/tiktok-dijatuhi-denda-sebesar-530-juta-euro-sekitar-601-juta-dolar-as-atau-rp98-/1113359617500212/",
       "http": 200,
       "live": true
     },
@@ -28,17 +44,28 @@
   ],
   "P2": [
     {
+      "url": "https://id.wikipedia.org/wiki/Daftar_Juara_Dunia_Grand_Prix_Sepeda_Motor",
+      "http": 200,
+      "live": true
+    },
+    {
+      "url": "https://id.wikipedia.org/wiki/Daftar_Juara_Dunia_Pembalap_500cc/MotoGP",
+      "http": 200,
+      "live": true
+    },
+    {
+      "url": "https://lib.itenas.ac.id/emag/koran/2025/JABAR_OKTOBER2025/JABAR_20251006/files/basic-html/page7.html",
+      "http": null,
+      "live": false,
+      "err": "HTTP Error 302: The HTTP server returned a redirect error that would lead to an infinite loop.\nThe l"
+    },
+    {
       "url": "https://stkippgribl.ac.id/opini/profil-veda-ega-pratama-pembalap-indonesia-di-moto3-2026/",
       "http": 200,
       "live": true
     },
     {
       "url": "https://www.instagram.com/p/DVTmLw1EhSA/",
-      "http": 200,
-      "live": true
-    },
-    {
-      "url": "https://www.instagram.com/reel/DRXDPkiCWeQ/",
       "http": 200,
       "live": true
     },
@@ -60,22 +87,12 @@
   ],
   "P3": [
     {
-      "url": "https://ar.wikipedia.org/wiki/%D8%A8%D9%88%D8%A7%D8%A8%D8%A9:%D9%81%D8%B1%D9%86%D8%B3%D8%A7",
+      "url": "https://cekipsaya.com/faq/",
       "http": 200,
       "live": true
     },
     {
-      "url": "https://ar.wikipedia.org/wiki/%D9%81%D8%B1%D9%86%D8%B3%D8%A7",
-      "http": 200,
-      "live": true
-    },
-    {
-      "url": "https://arz.wikipedia.org/wiki/%D9%81%D8%B1%D9%86%D8%B3%D8%A7",
-      "http": 200,
-      "live": true
-    },
-    {
-      "url": "https://en.wikipedia.org/wiki/Microsoft",
+      "url": "https://cikaindonesia.com/cikamediaweb/news/",
       "http": 200,
       "live": true
     },
@@ -85,12 +102,22 @@
       "live": true
     },
     {
+      "url": "https://www.instagram.com/p/DPAjcGpkp96/?hl=id",
+      "http": 200,
+      "live": true
+    },
+    {
+      "url": "https://www.instagram.com/p/DVfpPRqoBFI/",
+      "http": 200,
+      "live": true
+    },
+    {
       "url": "https://www.instagram.com/reel/DU_2-1tE1SQ/",
       "http": 200,
       "live": true
     },
     {
-      "url": "https://www.instagram.com/reel/DdAvz6eSKDP/",
+      "url": "https://www.lemon8-app.com/@elisaalissaa/7481306544068624913?region=id",
       "http": 200,
       "live": true
     }

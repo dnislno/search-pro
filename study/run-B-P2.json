@@ -29,6 +29,16 @@
       "method": "heuristic-v1"
     },
     {
+      "url": "https://id.wikipedia.org/wiki/Daftar_Juara_Dunia_Grand_Prix_Sepeda_Motor",
+      "score": 2.6923,
+      "method": "heuristic-v1"
+    },
+    {
+      "url": "https://id.wikipedia.org/wiki/Daftar_Juara_Dunia_Pembalap_500cc/MotoGP",
+      "score": 2.4615,
+      "method": "heuristic-v1"
+    },
+    {
       "url": "https://www.instagram.com/reel/DcvnLWMhhXM/",
       "score": 1.4538,
       "method": "heuristic-v1"
@@ -42,23 +52,13 @@
       "url": "https://www.motogp.com/id/gp-results",
       "score": 1.4538,
       "method": "heuristic-v1"
-    },
-    {
-      "url": "https://www.instagram.com/reel/DRXDPkiCWeQ/",
-      "score": 1.2231,
-      "method": "heuristic-v1"
-    },
-    {
-      "url": "https://www.facebook.com/groups/317941417371237/posts/923924213439618/",
-      "score": 1.2231,
-      "method": "heuristic-v1"
     }
   ],
   "fetched": [
     {
       "url": "https://lib.itenas.ac.id/emag/koran/2025/JABAR_OKTOBER2025/JABAR_20251006/files/basic-html/page7.html",
-      "status": "error",
-      "via": "direct"
+      "status": "ok",
+      "via": "jina-reader"
     },
     {
       "url": "https://www.kemenpora.go.id/detail/6457/hasil-kualifikasi-motogp-mandalika-2025-marco-bezzecchi-rebut-start-posisi-terdepan",
@@ -71,6 +71,16 @@
       "via": "direct"
     },
     {
+      "url": "https://id.wikipedia.org/wiki/Daftar_Juara_Dunia_Grand_Prix_Sepeda_Motor",
+      "status": "ok",
+      "via": "direct"
+    },
+    {
+      "url": "https://id.wikipedia.org/wiki/Daftar_Juara_Dunia_Pembalap_500cc/MotoGP",
+      "status": "ok",
+      "via": "direct"
+    },
+    {
       "url": "https://www.instagram.com/reel/DcvnLWMhhXM/",
       "status": "ok",
       "via": "direct"
@@ -84,25 +94,15 @@
       "url": "https://www.motogp.com/id/gp-results",
       "status": "ok",
       "via": "direct"
-    },
-    {
-      "url": "https://www.instagram.com/reel/DRXDPkiCWeQ/",
-      "status": "ok",
-      "via": "direct"
-    },
-    {
-      "url": "https://www.facebook.com/groups/317941417371237/posts/923924213439618/",
-      "status": "error",
-      "via": "direct"
     }
   ],
-  "n_evidence": 6,
+  "n_evidence": 8,
   "verdict": {
-    "n": 1,
+    "n": 3,
     "verified": 0,
-    "unverified": 1,
+    "unverified": 3,
     "pass_rate": 0.0
   },
-  "elapsed_s": 37.8,
-  "ts": "2026-09-15T02:22:47.649106+00:00"
+  "elapsed_s": 45.0,
+  "ts": "2026-09-15T03:13:45.499490+00:00"
 }

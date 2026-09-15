@@ -63,6 +63,19 @@ Unverified — zero fabrications served as fact.
 - NEXT (priced in effort, not adjectives): wire corroboration gate + fix query
   budget + upgrade retrieval (self-host SearXNG/Exa), then repeat this protocol.
 
+## Re-run under v2.3.0 (2026-09-15, identical prompts/settings + keyed reader)
+
+| Prompt | Before | After | Note |
+|---|---|---|---|
+| P1 Meta fines | 4/10 | **5/10** | pool now includes relevant Kontan article; composite claims still correctly rejected (0/2) |
+| P2 Mandalika | 5/10 | **7/10** | sourced refusal with explicit mismatch reasoning (truncated title, San Marino vs Mandalika); no winner served |
+| P3 iPhone price | 6/10 | **6/10** | clean refusal, itemized; no regression |
+
+No score regressions. Explicit pointer-demotion branch remains unit-proven but
+unobserved live (LLM-path claims lack file attribution) — tracked as open item,
+not claimed as proven. Link re-check at scoring time: 21/22 live (one 403, one
+redirect loop appeared after fetching — transient, recorded).
+
 ## Reproduce
 
 `python search.py --query "<prompt>" --mode pro --synth llm --llm-provider

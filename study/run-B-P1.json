@@ -11,7 +11,7 @@
     "Berapa total denda GDPR Uni Eropa terhadap Meta hingga akhir 2025 dan berapa denda tunggal terbesarnya tahun dan otoritas study OR paper OR report",
     "Berapa total denda GDPR Uni Eropa terhadap Meta hingga akhir 2025 dan berapa denda tunggal terbesarnya tahun dan otoritas site:go.id OR site:ac.id OR site:edu"
   ],
-  "n_candidates": 34,
+  "n_candidates": 36,
   "ranked": [
     {
       "url": "https://repository.bakrie.ac.id/12737/3/REVISI%20GAGASAN%20AKADEMISI%20MAROON%20UNTUK%20NEGERI.pdf",
@@ -20,11 +20,6 @@
     },
     {
       "url": "https://www.academia.edu/164723745/DIGITAL_CITIZENSHIP_Menjadi_Warga_di_Ruang_Maya_1",
-      "score": 2.0,
-      "method": "heuristic-v1"
-    },
-    {
-      "url": "https://en.wikipedia.org/wiki/Sushi",
       "score": 2.0,
       "method": "heuristic-v1"
     },
@@ -52,23 +47,23 @@
       "url": "https://www.instagram.com/p/DbkPC4OESSy/",
       "score": 0.75,
       "method": "heuristic-v1"
+    },
+    {
+      "url": "https://internasional.kontan.co.id/news/meta-dijatuhi-denda-us-13-miliar-akibat-persoalan-transfer-data-pengguna",
+      "score": 0.75,
+      "method": "heuristic-v1"
     }
   ],
   "fetched": [
     {
       "url": "https://repository.bakrie.ac.id/12737/3/REVISI%20GAGASAN%20AKADEMISI%20MAROON%20UNTUK%20NEGERI.pdf",
-      "status": "error",
-      "via": "direct"
+      "status": "ok",
+      "via": "jina-reader"
     },
     {
       "url": "https://www.academia.edu/164723745/DIGITAL_CITIZENSHIP_Menjadi_Warga_di_Ruang_Maya_1",
-      "status": "paywall",
-      "via": "direct"
-    },
-    {
-      "url": "https://en.wikipedia.org/wiki/Sushi",
       "status": "ok",
-      "via": "wikipedia-api"
+      "via": "jina-reader"
     },
     {
       "url": "https://xpert.digital/id/pengamatan-ai/",
@@ -82,8 +77,8 @@
     },
     {
       "url": "https://www.facebook.com/antaranewsdotcom/posts/tiktok-dijatuhi-denda-sebesar-530-juta-euro-sekitar-601-juta-dolar-as-atau-rp98-/1113359617500212/",
-      "status": "error",
-      "via": "direct"
+      "status": "ok",
+      "via": "jina-reader"
     },
     {
       "url": "https://jateng.antaranews.com/berita/580413/otoritas-irlandia-denda-tiktok-rp98-t",
@@ -94,15 +89,20 @@
       "url": "https://www.instagram.com/p/DbkPC4OESSy/",
       "status": "ok",
       "via": "direct"
+    },
+    {
+      "url": "https://internasional.kontan.co.id/news/meta-dijatuhi-denda-us-13-miliar-akibat-persoalan-transfer-data-pengguna",
+      "status": "ok",
+      "via": "direct"
     }
   ],
-  "n_evidence": 5,
+  "n_evidence": 8,
   "verdict": {
     "n": 2,
     "verified": 0,
     "unverified": 2,
     "pass_rate": 0.0
   },
-  "elapsed_s": 53.7,
-  "ts": "2026-09-15T02:21:37.817356+00:00"
+  "elapsed_s": 78.7,
+  "ts": "2026-09-15T03:12:17.746610+00:00"
 }
