@@ -63,6 +63,8 @@ def main():
     ap.add_argument("--advanced", action="store_true", help="BGE cross-encoder rerank")
     ap.add_argument("--top-k", type=int, default=0, help="override fetch budget")
     ap.add_argument("--out", default="", help="write markdown answer to file")
+    ap.add_argument("--run-json", default="",
+                    help="write machine-readable run summary (for harness) to file")
     ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args()
 
@@ -89,7 +91,8 @@ def main():
         else:
             queries = plan_queries(a.query, a.mode)
             cands = []
-            for q in queries:
+            gap = float(os.environ.get("SEARCH_GAP", "1.0"))
+            for i, q in enumerate(queries):
                 try:
                     cands += providers.search(q, provider=a.provider,
                                               limit=b["per_query"],
@@ -97,6 +100,8 @@ def main():
                 except RuntimeError as e:
                     print(f"error: {e}", file=sys.stderr)
                     return 2
+                if gap and i < len(queries) - 1:
+                    __import__("time").sleep(gap)
 
         # 3. rerank (existing tested script)
         cj = os.path.join(tmp, "candidates.json")
@@ -204,10 +209,30 @@ def main():
                   f"pass_rate={verdict['stats']['pass_rate']} elapsed={dt:.1f}s "
                   f"{t0.isoformat()}"]
         out = "\n".join(lines)
-        print(out)
+        try:
+            print(out)
+        except UnicodeEncodeError:  # Windows cp1252 console
+            sys.stdout.buffer.write((out + "\n").encode("utf-8", "replace"))
         if a.out:
             open(a.out, "w", encoding="utf-8").write(out)
             print(f"\nwrote {a.out}", file=sys.stderr)
+        if a.run_json:
+            summary = {
+                "query": a.query or "dry-run", "mode": a.mode,
+                "provider": a.provider, "synth": method,
+                "queries_used": queries, "n_candidates": len(cands),
+                "ranked": [{"url": c["url"], "score": c.get("_score"),
+                            "method": c.get("_method")} for c in ranked],
+                "fetched": ([{"url": c["url"], "status": fetched.get(c["url"])}
+                             for c in ranked] if not a.dry_run else
+                            [{"url": "fixture", "status": v}
+                             for v in fetched.values()]),
+                "n_evidence": len(evidence),
+                "verdict": verdict["stats"],
+                "elapsed_s": round(dt, 1), "ts": t0.isoformat(),
+            }
+            json.dump(summary, open(a.run_json, "w", encoding="utf-8"),
+                      ensure_ascii=False, indent=2)
         return 0
     except RuntimeError as e:
         print(f"error: {e}", file=sys.stderr)

@@ -14,34 +14,56 @@ import urllib.request
 UA = {"User-Agent": "search-pro/1.0.1 (+local CLI)"}
 TIMEOUT = 25
 
+_ID_MARKERS = frozenset(
+    "yang dan harga berapa jumlah daftar terbaru penduduk rupiah indonesia "
+    "vs tren".split())
 
-def searxng_search(query, base_url, limit=5, time_range=None, category="general"):
-    """GET {base}/search?q=..&format=json. Raises RuntimeError with setup hint."""
-    if not base_url:
+
+def guess_lang(query):
+    """id if Indonesian markers present, else en. Sinks instance-locale bias
+    (e.g. German-default instances answering 'Haus' with houses)."""
+    toks = set(query.lower().split())
+    return "id" if toks & _ID_MARKERS else "en"
+
+
+def searxng_search(query, base_url, limit=5, time_range=None, category="general",
+                   language="auto"):
+    """GET {base}/search?q=..&format=json. base_url may be comma-separated:
+    tries each in order (failover ring). Raises RuntimeError with setup hint."""
+    bases = [b.strip().rstrip("/") for b in (base_url or "").split(",") if b.strip()]
+    if not bases:
         raise RuntimeError(
-            "SearXNG not configured. Set SEARXNG_URL env or pass --searxng-url, "
+            "SearXNG not configured. Set SEARXNG_URL env or pass --searxng-url "
+            "(comma-separated allowed for failover), "
             "e.g. SEARXNG_URL=http://localhost:8888"
         )
-    params = {"q": query, "format": "json", "categories": category}
+    if language == "auto":
+        language = guess_lang(query)
+    params = {"q": query, "format": "json", "categories": category,
+              "language": language}
     if time_range:  # SearXNG: day | week | month | year
         params["time_range"] = time_range
-    url = base_url.rstrip("/") + "/search?" + urllib.parse.urlencode(params)
-    req = urllib.request.Request(url, headers=UA)
-    try:
-        with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
-            data = json.loads(r.read().decode("utf-8", "ignore"))
-    except Exception as e:
-        raise RuntimeError(f"SearXNG request failed ({base_url}): {e}")
-    out = []
-    for it in (data.get("results") or [])[:limit]:
-        if it.get("url"):
-            out.append({
-                "title": it.get("title") or "",
-                "url": it.get("url"),
-                "snippet": it.get("content") or "",
-                "published": it.get("publishedDate"),
-            })
-    return out
+    errs = []
+    for base in bases:
+        url = base + "/search?" + urllib.parse.urlencode(params)
+        req = urllib.request.Request(url, headers=UA)
+        try:
+            with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+                data = json.loads(r.read().decode("utf-8", "ignore"))
+        except Exception as e:
+            errs.append(f"{base}: {e}")
+            continue
+        out = []
+        for it in (data.get("results") or [])[:limit]:
+            if it.get("url"):
+                out.append({
+                    "title": it.get("title") or "",
+                    "url": it.get("url"),
+                    "snippet": it.get("content") or "",
+                    "published": it.get("publishedDate"),
+                })
+        return out
+    raise RuntimeError("All SearXNG backends failed — " + " | ".join(errs)[:400])
 
 
 def exa_search(query, api_key=None, limit=5, start_date=None):

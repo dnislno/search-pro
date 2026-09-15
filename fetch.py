@@ -9,7 +9,9 @@ import urllib.error
 import urllib.request
 from html.parser import HTMLParser
 
-UA = {"User-Agent": "search-pro/1.0.1 (+local CLI)"}
+UA = {"User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                     "AppleWebKit/537.36 (KHTML, like Gecko) "
+                     "Chrome/126.0 Safari/537.36 search-pro/1.0.1")}
 TIMEOUT = 25
 MAX_BYTES = 2_000_000
 MAX_CHARS = 20_000

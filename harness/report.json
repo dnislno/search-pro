@@ -1,0 +1,39 @@
+{
+  "ts": "2026-09-15T00:55:36.485851+00:00",
+  "mode": "pro",
+  "n": 2,
+  "completed": 1,
+  "M1_grep_pass": 1.0,
+  "M2_link_live": 0.25,
+  "M3_median_verified": 6,
+  "M3_frac_ge6": 1.0,
+  "baselines": {
+    "haus_grep": 0.659,
+    "haus_readable": 0.787
+  },
+  "targets": {
+    "M1": 0.85,
+    "M2": 0.98,
+    "M3_median": 6
+  },
+  "rows": [
+    {
+      "id": "F01",
+      "cat": "factual",
+      "exit": 1,
+      "elapsed_s": 24.4,
+      "stderr": "error: C:\\Python314\\python.exe C:\\DRIVE D\\DENNIS\\KERJA\\Code\\opencode\\search-pro\\scripts\\verify-citations.py --claims C:\\Users\\denni\\AppData\\Local\\Temp\\searchpro_ydxewh34\\claims.json --corpus C:\\Users\\denni\\AppData\\Local\\Temp\\searchpro_ydxewh34\\corpus --map C:\\Users\\denni\\AppData\\Local\\Temp\\searchpro"
+    },
+    {
+      "id": "A01",
+      "cat": "academic",
+      "exit": 0,
+      "elapsed_s": 20.3,
+      "verified": 6,
+      "unverified": 0,
+      "pass_rate": 1.0,
+      "fetched_ok": 2,
+      "fetched_n": 8
+    }
+  ]
+}
