@@ -21,7 +21,7 @@ import providers
 from fetch import fetch
 import synthesize
 
-VERSION = "2.4.0"
+VERSION = "2.5.0"
 
 BUDGETS = {
     "best": {"queries": 4, "per_query": 5, "fetch": 4},
@@ -135,6 +135,176 @@ def run(cmd):
     return p.stdout
 
 
+class FatalConfigError(RuntimeError):
+    """Provider/LLM setup failures -> exit code 2 (not 1)."""
+
+
+# v2.5 2.1: agentic-light loop defaults per mode (overridable via
+# --max-loops / SEARCH_MAX_LOOPS; 0 disables re-search).
+DEFAULT_LOOPS = {"best": 0, "pro": 1, "research": 2}
+MIN_VERIFIED_STOP = 8
+MAX_UNVERIFIED_RATIO_STOP = 0.25
+
+
+def fanout_search(queries, provider, searxng_url, per_query, gap):
+    cands = []
+    for i, q in enumerate(queries):
+        try:
+            cands += providers.search(q, provider=provider, limit=per_query,
+                                      searxng_url=searxng_url)
+        except RuntimeError as e:
+            print(f"error: {e}", file=sys.stderr)
+            raise FatalConfigError(str(e)) from e
+        if gap and i < len(queries) - 1:
+            __import__("time").sleep(gap)
+    return cands
+
+
+def rerank_stage(cands, query, fetch_n, use_advanced, tmp, tag):
+    cj = os.path.join(tmp, f"candidates-{tag}.json")
+    json.dump(cands, open(cj, "w", encoding="utf-8"), ensure_ascii=False)
+    cmd = [sys.executable, os.path.join(HERE, "scripts", "rerank.py"),
+           "--input", cj, "--query", query, "--top-k", str(fetch_n)]
+    if use_advanced:
+        cmd.append("--advanced")
+    ranked = json.loads(run(cmd))
+    method = ranked[0].get("_method", "?") if ranked else "?"
+    return ranked, method
+
+
+def fetch_stage(ranked, corpus, start_idx, seen_urls, fetched, vias,
+                url_to_file, url_to_title):
+    """Fetch unseen URLs into corpus/doc{idx}.md. Returns (next_idx, n_new)."""
+    idx, n_new = start_idx, 0
+    for c in ranked:
+        u = c.get("url", "")
+        if not u:
+            continue
+        url_to_title.setdefault(u, c.get("title", ""))
+        if u in seen_urls:
+            continue
+        seen_urls.add(u)
+        r = fetch(u)
+        fetched[u] = r["status"]
+        vias[u] = r.get("via", "direct")
+        if r["status"] == "ok":
+            fn = f"doc{idx}.md"
+            open(os.path.join(corpus, fn), "w",
+                 encoding="utf-8").write(f"# {c.get('title', '')}\n{r['text']}")
+            url_to_file[u] = fn
+            idx += 1
+            n_new += 1
+    return idx, n_new
+
+
+def build_evidence(url_to_file, url_to_title, corpus, query):
+    evidence, n = [], 0
+    for u, fn in sorted(url_to_file.items(), key=lambda kv: kv[1]):
+        path = os.path.join(corpus, fn)
+        if not os.path.exists(path):
+            continue
+        n += 1
+        text = open(path, encoding="utf-8").read()
+        evidence.append({"n": n, "title": url_to_title.get(u, ""), "url": u,
+                         "file": fn,
+                         "chunks": synthesize.pick_sentences(query, text)})
+    return evidence
+
+
+def synthesize_stage(query, evidence, method, a):
+    if method == "llm":
+        try:
+            body = synthesize.llm_rewrite(
+                query, evidence, provider=a.llm_provider,
+                model=a.llm_model or None,
+                reasoning_effort=a.reasoning_effort or None)
+            claims = synthesize.attribute_claims(body, evidence)
+            log(f"synthesized via llm: {len(claims)} attributed claims")
+            return [body], claims
+        except RuntimeError as e:
+            print(f"error: {e}", file=sys.stderr)
+            raise FatalConfigError(str(e)) from e
+    return synthesize.extractive(query, evidence)
+
+
+def verify_stage(claims, corpus, tmp, tag):
+    for cl in claims:  # stash attribution before the verifier pops "file"
+        if "file" in cl:
+            cl["_file"] = cl.get("file", "")
+    idmap = {cl["id"]: cl.pop("file", "") for cl in claims if "file" in cl}
+    qj = os.path.join(tmp, f"claims-{tag}.json")
+    json.dump(claims, open(qj, "w", encoding="utf-8"), ensure_ascii=False)
+    vcmd = [sys.executable, os.path.join(HERE, "scripts", "verify-citations.py"),
+            "--claims", qj, "--corpus", corpus]
+    if idmap:
+        mj = os.path.join(tmp, f"map-{tag}.json")
+        json.dump(idmap, open(mj, "w", encoding="utf-8"))
+        vcmd += ["--map", mj]
+    verdict = json.loads(run(vcmd)) if claims else {
+        "verified": [], "unverified": [], "stats": {"pass_rate": 0}}
+    return verdict
+
+
+def apply_gate(verdict, claims, evidence, corpus):
+    """Pointer-without-backing demotion. Returns (verdict, n_demoted)."""
+    try:
+        from corroborate import (origin_of as _org, body_has_figure as _bhf,
+                                 norm_fig as _nf, extract_figures as _xf)
+    except ImportError:
+        return verdict, 0
+    n_demoted = 0
+    if not verdict.get("verified"):
+        return verdict, 0
+    f2u = {e["file"]: e["url"] for e in evidence}
+    bodies = {fn: open(os.path.join(corpus, fn), encoding="utf-8").read()
+              for fn in os.listdir(corpus) if fn.endswith(".md")}
+    claim_file = {cl["id"]: cl.get("_file", "") for cl in claims}
+    keep, drop = [], []
+    for v in verdict["verified"]:
+        own_fn = claim_file.get(v["id"], "")
+        if _org(f2u.get(own_fn, ""), "").startswith("pointer:"):
+            figs = {_nf(m) for m in _xf(v.get("text", ""))} - {""}
+            backed = any(
+                not _org(f2u.get(fn, ""), "").startswith("pointer:")
+                and any(_bhf(txt, x) for x in figs)
+                for fn, txt in bodies.items() if fn != own_fn)
+            if not backed:
+                v["gate"] = "demoted:pointer-without-backing"
+                drop.append(v)
+                continue
+        keep.append(v)
+    verdict["verified"] = keep
+    verdict["unverified"] = drop + verdict.get("unverified", [])
+    n_demoted = len(drop)
+    verdict["stats"] = {"n": len(claims), "verified": len(keep),
+                        "unverified": len(verdict["unverified"]),
+                        "pass_rate": round(len(keep) / max(1, len(claims)), 3)}
+    return verdict, n_demoted
+
+
+def generate_followups(query, verdict, intent, seen_queries, limit=4):
+    """Rule-based follow-up queries for loop>0 (v2.5 2.1)."""
+    year = str(datetime.datetime.now().year)
+    cands = []
+    unverified = verdict.get("unverified", []) if verdict else []
+    if any("pointer" in str(u.get("gate", "")) for u in unverified):
+        cands.append(f"{query} official source OR government OR report")
+    if intent.get("is_numeric"):
+        cands.append(f"{query} statistics OR data OR angka resmi")
+    if intent.get("is_compare"):
+        cands.append(f"{query} vs comparison review terbaru")
+    cands.append(f"{query} {year} latest update")
+    cands.append(f"{query} official OR laporan OR announcement")
+    out = []
+    for q in cands:
+        if q.lower() not in seen_queries:
+            seen_queries.add(q.lower())
+            out.append(q)
+        if len(out) >= limit:
+            break
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser(description="search-pro local CLI")
     ap.add_argument("--query", default="")
@@ -157,6 +327,9 @@ def main():
                     help="opt-in LLM query expansion for leftover budget slots "
                          "(also via SEARCH_QUERY_EXPANSION=1; needs LLM key)")
     ap.add_argument("--top-k", type=int, default=0, help="override fetch budget")
+    ap.add_argument("--max-loops", type=int, default=None,
+                    help="agentic re-search loops (default per mode: best 0, "
+                         "pro 1, research 2; 0 disables; also SEARCH_MAX_LOOPS)")
     ap.add_argument("--out", default="", help="write markdown answer to file")
     ap.add_argument("--run-json", default="",
                     help="write machine-readable run summary (for harness) to file")
@@ -168,13 +341,43 @@ def main():
         return 2
     b = BUDGETS[a.mode]
     fetch_n = a.top_k or b["fetch"]
+    if a.max_loops is not None:
+        max_loops = max(0, a.max_loops)
+    elif (os.environ.get("SEARCH_MAX_LOOPS", "") or "").strip() != "":
+        try:
+            max_loops = max(0, int(os.environ["SEARCH_MAX_LOOPS"]))
+        except ValueError:
+            max_loops = DEFAULT_LOOPS[a.mode]
+    else:
+        max_loops = DEFAULT_LOOPS[a.mode]
+    if a.dry_run:
+        max_loops = 0
+    # v2.4 1.3: BGE cross-encoder is default on pro/research (falls back
+    # to heuristic inside rerank.py when `rerankers` isn't installed).
+    use_advanced = (a.advanced or a.mode in ("pro", "research")) \
+        and not a.no_advanced
+    method = a.synth
+    if method == "auto":
+        method = ("llm" if os.environ.get("ANTHROPIC_API_KEY")
+                  or os.environ.get("OPENAI_API_KEY")
+                  or os.environ.get("OPENROUTER_API_KEY") else "extractive")
     tmp = tempfile.mkdtemp(prefix="searchpro_")
     corpus = os.path.join(tmp, "corpus")
     os.makedirs(corpus, exist_ok=True)
     t0 = datetime.datetime.now(datetime.timezone.utc)
+    intent = detect_intent(a.query or "")
 
     try:
-        # 1-2. plan + fan-out
+        seen_urls, seen_queries = set(), set()
+        url_to_file, url_to_title = {}, {}
+        fetched, vias = {}, {}
+        doc_idx = 0
+        expand_fn = None
+        if a.expand_queries or os.environ.get("SEARCH_QUERY_EXPANSION") == "1":
+            def expand_fn(q, n, _a=a):
+                return synthesize.llm_expand_queries(
+                    q, n, provider=_a.llm_provider,
+                    model=_a.llm_model or None)
         if a.dry_run:
             cands = json.load(open(os.path.join(HERE, "examples", "candidates.json"),
                                    encoding="utf-8"))
@@ -183,153 +386,105 @@ def main():
             shutil_corpus = os.path.join(HERE, "examples", "corpus", "doc1.md")
             open(os.path.join(corpus, "doc0.md"), "w", encoding="utf-8").write(
                 open(shutil_corpus, encoding="utf-8").read())
-        else:
-            expand_fn = None
-            if a.expand_queries or os.environ.get("SEARCH_QUERY_EXPANSION") == "1":
-                def expand_fn(q, n, _a=a):
-                    return synthesize.llm_expand_queries(
-                        q, n, provider=_a.llm_provider,
-                        model=_a.llm_model or None)
-            queries = plan_queries(a.query, a.mode, llm_expand_fn=expand_fn)
-            log(f"planned {len(queries)} queries (mode={a.mode})")
-            cands, vias = [], {}
-            gap = float(os.environ.get("SEARCH_GAP", "1.0"))
-            for i, q in enumerate(queries):
-                try:
-                    cands += providers.search(q, provider=a.provider,
-                                              limit=b["per_query"],
-                                              searxng_url=a.searxng_url)
-                except RuntimeError as e:
-                    print(f"error: {e}", file=sys.stderr)
-                    return 2
-                if gap and i < len(queries) - 1:
-                    __import__("time").sleep(gap)
-            log(f"fan-out done: {len(cands)} candidates")
+            url_to_file = {"https://example.com/perplexity-guide": "doc0.md"}
+            url_to_title = {"https://example.com/perplexity-guide":
+                            cands[0].get("title", "")}
+            seen_urls.add("https://example.com/perplexity-guide")
 
-        # 3. rerank (existing tested script)
-        cj = os.path.join(tmp, "candidates.json")
-        json.dump(cands, open(cj, "w", encoding="utf-8"), ensure_ascii=False)
-        # v2.4 1.3: BGE cross-encoder is default on pro/research (falls back
-        # to heuristic inside rerank.py when `rerankers` isn't installed).
-        use_advanced = (a.advanced or a.mode in ("pro", "research")) \
-            and not a.no_advanced
-        cmd = [sys.executable, os.path.join(HERE, "scripts", "rerank.py"),
-               "--input", cj, "--query", a.query or "dry-run",
-               "--top-k", str(fetch_n)]
-        if use_advanced:
-            cmd.append("--advanced")
-        ranked = json.loads(run(cmd))
-        rerank_method = (ranked[0].get("_method", "?") if ranked else "?")
-        log(f"reranked: {len(ranked)} kept via {rerank_method}")
+        bullets, claims, evidence = [], [], []
+        verdict = {"verified": [], "unverified": [],
+                   "stats": {"pass_rate": 0}}
+        n_demoted, rerank_method = 0, "?"
+        followups_all, loops_used = [], 0
+        gap = float(os.environ.get("SEARCH_GAP", "1.0"))
 
-        # 4. fetch
-        if not a.dry_run:
-            fetched = {}
-            for i, c in enumerate(ranked):
-                r = fetch(c["url"])
-                fetched[c["url"]] = r["status"]
-                vias[c["url"]] = r.get("via", "direct")
-                if r["status"] == "ok":
-                    open(os.path.join(corpus, f"doc{i}.md"), "w",
-                         encoding="utf-8").write(f"# {c.get('title','')}\n{r['text']}")
-            nok = sum(1 for v in fetched.values() if v == "ok")
-            log(f"fetched: {nok}/{len(ranked)} ok")
+        for loop in range(max_loops + 1):
+            loops_used = loop + 1
+            if a.dry_run:
+                pass  # fixture queries/cands already staged above
+            elif loop == 0:
+                queries = plan_queries(a.query, a.mode,
+                                       llm_expand_fn=expand_fn)
+                seen_queries.update(q.lower() for q in queries)
+                log(f"planned {len(queries)} queries (mode={a.mode})")
+                cands = fanout_search(
+                    queries, a.provider, a.searxng_url, b["per_query"], gap)
+                log(f"fan-out done: {len(cands)} candidates")
+            else:
+                queries = generate_followups(a.query, verdict, intent,
+                                             seen_queries)
+                if not queries:
+                    log("loop %d: no new follow-ups, stop" % loop)
+                    loops_used = loop
+                    break
+                followups_all += queries
+                log(f"loop {loop}: follow-up queries: {queries}")
+                cands = fanout_search(
+                    queries, a.provider, a.searxng_url, b["per_query"], gap)
 
-        # 5. evidence chunks (query-relevant sentences, deterministic)
-        files = sorted(f for f in os.listdir(corpus) if f.endswith(".md"))
-        url_of = ({c["url"]: f"doc{i}.md" for i, c in enumerate(ranked)}
-                  if not a.dry_run else
-                  {"https://example.com/perplexity-guide": "doc0.md"})
-        evidence, n = [], 0
-        order = ranked if not a.dry_run else cands[:fetch_n]
-        for c in order:
-            fn = url_of.get(c["url"])
-            if not fn or not os.path.exists(os.path.join(corpus, fn)):
-                continue
-            n += 1
-            text = open(os.path.join(corpus, fn), encoding="utf-8").read()
-            evidence.append({"n": n, "title": c.get("title", ""), "url": c["url"],
-                             "file": fn,
-                             "chunks": synthesize.pick_sentences(a.query or "dry-run", text)})
+            # 3. rerank
+            if a.dry_run:
+                ranked, rerank_method = cands[:fetch_n], "fixture"
+            else:
+                ranked, rerank_method = rerank_stage(
+                    [c for c in cands if c.get("url") not in seen_urls] or cands,
+                    a.query, fetch_n, use_advanced, tmp, f"l{loop}")
+            log(f"loop {loop}: reranked {len(ranked)} via {rerank_method}")
 
-        # 6. synthesize
-        method = a.synth
-        if method == "auto":
-            method = ("llm" if os.environ.get("ANTHROPIC_API_KEY")
-                      or os.environ.get("OPENAI_API_KEY")
-                      or os.environ.get("OPENROUTER_API_KEY") else "extractive")
-        if method == "llm":
-            try:
-                body = synthesize.llm_rewrite(
-                    a.query, evidence, provider=a.llm_provider,
-                    model=a.llm_model or None,
-                    reasoning_effort=a.reasoning_effort or None)
-                # v2.4 1.2: marker-aware attribution so every claim carries
-                # file+url and the corroboration gate below can fire.
-                claims = synthesize.attribute_claims(body, evidence)
-                bullets = [body]
-                log(f"synthesized via llm: {len(claims)} attributed claims")
-            except RuntimeError as e:
-                print(f"error: {e}", file=sys.stderr)
-                return 2
-        else:
-            bullets, claims = synthesize.extractive(a.query or "dry-run", evidence)
+            # 4. fetch (unseen only)
+            if not a.dry_run:
+                doc_idx, n_new = fetch_stage(
+                    ranked, corpus, doc_idx, seen_urls, fetched, vias,
+                    url_to_file, url_to_title)
+                log(f"loop {loop}: fetched {n_new} new ok "
+                    f"({len(url_to_file)} docs total)")
+                if loop > 0 and n_new == 0:
+                    log(f"loop {loop}: nothing new, stop")
+                    loops_used = loop
+                    break
 
-        # 7. verify (existing tested script)
-        claim_file = {cl["id"]: cl.get("file", "") for cl in claims}
-        idmap = {cl["id"]: cl.pop("file", "") for cl in claims if "file" in cl}
-        qj = os.path.join(tmp, "claims.json")
-        json.dump(claims, open(qj, "w", encoding="utf-8"), ensure_ascii=False)
-        vcmd = [sys.executable, os.path.join(HERE, "scripts", "verify-citations.py"),
-                "--claims", qj, "--corpus", corpus]
-        if idmap:
-            mj = os.path.join(tmp, "map.json")
-            json.dump(idmap, open(mj, "w", encoding="utf-8"))
-            vcmd += ["--map", mj]
-        verdict = json.loads(run(vcmd)) if claims else {
-            "verified": [], "unverified": [], "stats": {"pass_rate": 0}}
-
-        # 7b. corroboration gate (wired from v2.2.0 experiment): claims whose
-        # only backing is a pointer source (social/forums) need an independent
-        # verbatim backing in a non-pointer file, else demoted. Fixes study P2.
-        # v2.4 1.2: LLM-path claims now carry file attribution, so this fires.
-        n_demoted = 0
-        try:
-            from corroborate import (origin_of as _org,
-                                     body_has_figure as _bhf,
-                                     norm_fig as _nf,
-                                     extract_figures as _xf)
-        except ImportError:
-            _org = None
-        if _org is not None and verdict.get("verified"):
-            f2u = {e["file"]: e["url"] for e in evidence}
-            bodies = {fn: open(os.path.join(corpus, fn), encoding="utf-8").read()
-                      for fn in os.listdir(corpus) if fn.endswith(".md")}
-            keep, drop = [], []
-            for v in verdict["verified"]:
-                own_fn = claim_file.get(v["id"], "")
-                if _org(f2u.get(own_fn, ""), "").startswith("pointer:"):
-                    figs = {_nf(m) for m in _xf(v.get("text", ""))} - {""}
-                    backed = any(
-                        not _org(f2u.get(fn, ""), "").startswith("pointer:")
-                        and any(_bhf(txt, n) for n in figs)
-                        for fn, txt in bodies.items() if fn != own_fn)
-                    if not backed:
-                        v["gate"] = "demoted:pointer-without-backing"
-                        drop.append(v)
+            # 5. evidence (rebuilt over merged corpus each loop)
+            if a.dry_run:
+                url_of = {"https://example.com/perplexity-guide": "doc0.md"}
+                evidence, n = [], 0
+                for c in cands[:fetch_n]:
+                    fn = url_of.get(c["url"])
+                    if not fn or not os.path.exists(os.path.join(corpus, fn)):
                         continue
-                keep.append(v)
-            verdict["verified"] = keep
-            verdict["unverified"] = drop + verdict.get("unverified", [])
-            n_demoted = len(drop)
-            verdict["stats"] = {"n": len(claims), "verified": len(keep),
-                                "unverified": len(verdict["unverified"]),
-                                "pass_rate": round(len(keep) / max(1, len(claims)), 3)}
-        if n_demoted:
-            log(f"corroboration gate demoted {n_demoted} pointer-backed claim(s)")
+                    n += 1
+                    text = open(os.path.join(corpus, fn),
+                                encoding="utf-8").read()
+                    evidence.append({"n": n, "title": c.get("title", ""),
+                                     "url": c["url"], "file": fn,
+                                     "chunks": synthesize.pick_sentences(
+                                         "dry-run", text)})
+            else:
+                evidence = build_evidence(url_to_file, url_to_title,
+                                          corpus, a.query)
+
+            # 6-7. synthesize + verify + gate
+            bullets, claims = synthesize_stage(a.query or "dry-run",
+                                               evidence, method, a)
+            verdict = verify_stage(claims, corpus, tmp, f"l{loop}")
+            verdict, n_demoted = apply_gate(verdict, claims, evidence, corpus)
+            if n_demoted:
+                log(f"corroboration gate demoted {n_demoted} claim(s)")
+            n_ver = len(verdict.get("verified", []))
+            n_unv = len(verdict.get("unverified", []))
+            ratio = n_unv / max(1, n_ver + n_unv)
+            log(f"loop {loop}: verified={n_ver} unverified={n_unv} "
+                f"ratio={ratio:.2f}")
+            if ((n_ver >= MIN_VERIFIED_STOP
+                    and ratio < MAX_UNVERIFIED_RATIO_STOP)
+                    or loop == max_loops):
+                break
+
+        # 7c. conflicts across verified claims (v2.5 2.3)
+        conflicts = synthesize.detect_conflicts(verdict.get("verified", []))
+        if conflicts:
+            log(f"conflicting reports: {len(conflicts)} unit(s)")
 
         # 8. compose
-        ok_ids = {v.get("text") for v in verdict["verified"]}
         lines = [f"## Answer — {a.query or 'dry-run'}", ""]
         lines += [bl for bl in bullets
                   if method == "llm" or any(bl.startswith(f"- {v['text']}")
@@ -338,6 +493,12 @@ def main():
         for e in evidence:
             st = "read-full" if e["file"] in (os.listdir(corpus)) else "missing"
             lines.append(f"{e['n']}. [{e['title']}]({e['url']}) — {st}")
+        if conflicts:
+            lines += ["", "## Conflicting reports", ""]
+            for cf in conflicts:
+                vals = "; ".join(
+                    f"{v['value']} — {v['text'][:140]}" for v in cf["values"])
+                lines.append(f"- unit `{cf['unit']}`: {vals}")
         if verdict["unverified"]:
             lines += ["", "## Unverified (not cited as fact)", ""]
             lines += [f"- {u['text']}" for u in verdict["unverified"]]
@@ -349,7 +510,7 @@ def main():
                   f"model=search-pro/{VERSION}+{method} mode={a.mode} "
                   f"provider={a.provider} queries={len(queries)} "
                   f"fetched={len(evidence)} verified={verdict['stats'].get('verified', len(verdict['verified']))}/{len(claims)} "
-                  f"demoted={n_demoted} rerank={rerank_method} "
+                  f"demoted={n_demoted} rerank={rerank_method} loops={loops_used} "
                   f"pass_rate={verdict['stats']['pass_rate']} elapsed={dt:.1f}s "
                   f"{t0.isoformat()}"]
         out = "\n".join(lines)
@@ -367,6 +528,8 @@ def main():
                 "version": VERSION,
                 "queries_used": queries, "n_candidates": len(cands),
                 "rerank_method": rerank_method, "demoted": n_demoted,
+                "loops_used": loops_used, "followups": followups_all,
+                "n_conflicts": len(conflicts),
                 "ranked": [{"url": c["url"], "score": c.get("_score"),
                             "method": c.get("_method")} for c in ranked],
                 "fetched": ([{"url": c["url"], "status": fetched.get(c["url"]),
@@ -381,6 +544,8 @@ def main():
             json.dump(summary, open(a.run_json, "w", encoding="utf-8"),
                       ensure_ascii=False, indent=2)
         return 0
+    except FatalConfigError:
+        return 2
     except RuntimeError as e:
         print(f"error: {e}", file=sys.stderr)
         return 1

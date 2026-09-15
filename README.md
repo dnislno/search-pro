@@ -181,6 +181,7 @@ Module-level usage (`scripts/rerank.py`, `scripts/verify-citations.py`) and the
 | `OPENROUTER_MAX_EVIDENCE_CHARS` / `OPENROUTER_MAX_QUERY_CHARS` | No | Truncate evidence/query per LLM call (large pastes trigger gateway failover) | `12000` / `2000` |
 | `SEARCH_QUERY_EXPANSION` | No | Set `1` to enable LLM query expansion (same as `--expand-queries`) | off |
 | `RERANK_MIN_SCORE` | No | Drop rerank candidates below this score (0 = off) | `0` |
+| `SEARCH_MAX_LOOPS` | No | Override default agentic loops per mode | per-mode default |
 
 Secrets live in the environment only. The repository is secret-scanned before
 every commit; no key has ever been committed (verified in CI-equivalent local gate).
@@ -193,7 +194,7 @@ every commit; no key has ever been committed (verified in CI-equivalent local ga
 python search.py --query "..." [--mode best|pro|research] [--provider auto|searxng|exa]
                  [--synth auto|extractive|llm] [--llm-provider auto|anthropic|openai|openrouter]
                  [--llm-model ID] [--reasoning-effort EFFORT] [--advanced] [--no-advanced]
-                 [--expand-queries] [--top-k N] [--out FILE] [--run-json FILE] [--dry-run]
+                 [--expand-queries] [--max-loops N] [--top-k N] [--out FILE] [--run-json FILE] [--dry-run]
 ```
 
 | Flag | Effect |
@@ -204,6 +205,7 @@ python search.py --query "..." [--mode best|pro|research] [--provider auto|searx
 | `--advanced` | Force BGE cross-encoder rerank (default auto-ON for pro/research since v2.4, heuristic fallback if `rerankers` missing) |
 | `--no-advanced` | Force heuristic rerank (overrides auto-BGE) |
 | `--expand-queries` | Opt-in LLM query expansion for leftover budget slots (needs LLM key) |
+| `--max-loops` | Agentic re-search loops, v2.5 (default per mode: best 0, pro 1, research 2; stops early when ≥8 verified & <25% unverified, or nothing new) |
 | `--run-json` | Machine-readable summary (powers `harness/run.py`) |
 | Exit codes | `0` ok (even with Unverified section) · `2` config error · `1` runtime failure |
 

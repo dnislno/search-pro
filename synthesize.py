@@ -17,16 +17,59 @@ def tokens(s):
     return re.findall(r"[a-z0-9]{3,}", (s or "").lower())
 
 
-def pick_sentences(query, text, k=3):
+def pick_sentences(query, text, k=5):
+    """Query-relevant sentences (v2.5 2.2): token overlap + figure/number
+    bonus + generic penalty. Returns up to k (default 5, was 3)."""
     q = set(tokens(query))
+    q_figs = {re.sub(r"\D", "", m)
+              for m in re.findall(r"\d[\d.,]*", query or "")} - {""}
     scored = []
     for s in SENT_SPLIT.split(text or ""):
         s = s.strip()
-        if len(s) < 40:
+        if len(s) < 40 or len(s) > 600:
             continue
-        scored.append((len(q & set(tokens(s))), -len(s), s))
+        t = tokens(s)
+        overlap = len(q & set(t)) / max(1, len(q))
+        sent_figs = {re.sub(r"\D", "", m)
+                     for m in re.findall(r"\d[\d.,]*", s)} - {""}
+        fig_bonus = 0.4 if (sent_figs & q_figs) else 0.0
+        has_number = 0.15 if re.search(r"\d", s) else 0.0
+        generic_pen = -0.3 if len(set(t)) < 6 else 0.0
+        score = 2.5 * overlap + fig_bonus + has_number + generic_pen
+        scored.append((score, -len(s), s))
     scored.sort(reverse=True)
     return [s for _, _, s in scored[:k]]
+
+
+_CONFLICT_RE = re.compile(
+    r"(\d[\d.,]*)\s*(%|percent|persen|million|billion|miliar|juta|triliun|"
+    r"kg|km|mAh|rupiah|\brp\b|usd|\$|votes?|suara|points?|poin|seats?|kursi)",
+    flags=re.I)
+
+
+def detect_conflicts(verified_claims, limit=5):
+    """Group verified claims by unit; a unit with >=2 distinct normalized
+    values is a conflict (v2.5 2.3). Returns [{unit, values:[{value, text}]}].
+    stdlib only, heuristic by design — reviewers see both numbers."""
+    groups = {}
+    for cl in verified_claims or []:
+        text = cl.get("text", "")
+        for num, unit in _CONFLICT_RE.findall(text):
+            norm = re.sub(r"\D", "", num)
+            if not norm or re.fullmatch(r"(19|20)\d{2}", norm):
+                continue  # bare years are never rivals
+            key = unit.lower().replace("$", "usd")
+            slot = groups.setdefault(key, {})
+            slot.setdefault(norm, text)
+    out = []
+    for unit, vals in groups.items():
+        if len(vals) >= 2:
+            out.append({"unit": unit,
+                        "values": [{"value": v, "text": t}
+                                   for v, t in list(vals.items())[:3]]})
+        if len(out) >= limit:
+            break
+    return out
 
 
 def extractive(query, evidence):
