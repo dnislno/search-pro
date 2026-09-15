@@ -92,7 +92,7 @@ def main():
                 open(shutil_corpus, encoding="utf-8").read())
         else:
             queries = plan_queries(a.query, a.mode)
-            cands = []
+            cands, vias = [], {}
             gap = float(os.environ.get("SEARCH_GAP", "1.0"))
             for i, q in enumerate(queries):
                 try:
@@ -121,6 +121,7 @@ def main():
             for i, c in enumerate(ranked):
                 r = fetch(c["url"])
                 fetched[c["url"]] = r["status"]
+                vias[c["url"]] = r.get("via", "direct")
                 if r["status"] == "ok":
                     open(os.path.join(corpus, f"doc{i}.md"), "w",
                          encoding="utf-8").write(f"# {c.get('title','')}\n{r['text']}")
@@ -225,10 +226,11 @@ def main():
                 "queries_used": queries, "n_candidates": len(cands),
                 "ranked": [{"url": c["url"], "score": c.get("_score"),
                             "method": c.get("_method")} for c in ranked],
-                "fetched": ([{"url": c["url"], "status": fetched.get(c["url"])}
-                             for c in ranked] if not a.dry_run else
-                            [{"url": "fixture", "status": v}
-                             for v in fetched.values()]),
+                "fetched": ([{"url": c["url"], "status": fetched.get(c["url"]),
+                               "via": vias.get(c["url"], "direct")}
+                              for c in ranked] if not a.dry_run else
+                             [{"url": "fixture", "status": v, "via": "direct"}
+                              for v in fetched.values()]),
                 "n_evidence": len(evidence),
                 "verdict": verdict["stats"],
                 "elapsed_s": round(dt, 1), "ts": t0.isoformat(),

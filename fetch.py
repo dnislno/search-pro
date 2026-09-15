@@ -56,23 +56,69 @@ def fetch(url: str) -> dict:
         with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
             ctype = (r.headers.get("Content-Type") or "").lower()
             if "html" not in ctype and "text" not in ctype:
-                return {"url": url, "status": "error",
-                        "text": f"unsupported content-type: {ctype or 'unknown'}"}
+                return _fallback(url, {"url": url, "status": "error",
+                    "text": f"unsupported content-type: {ctype or 'unknown'}"})
             raw = r.read(MAX_BYTES).decode("utf-8", "ignore")
     except urllib.error.HTTPError as e:
         if e.code in (401, 403, 429):
-            return {"url": url, "status": "paywall", "text": f"http {e.code}"}
-        return {"url": url, "status": "error", "text": f"http {e.code}"}
+            return _fallback(url, {"url": url, "status": "paywall",
+                                   "text": f"http {e.code}"})
+        return _fallback(url, {"url": url, "status": "error",
+                               "text": f"http {e.code}"})
     except Exception as e:
-        return {"url": url, "status": "error", "text": f"fetch failed: {e}"}
+        return _fallback(url, {"url": url, "status": "error",
+                               "text": f"fetch failed: {e}"})
 
     low = raw.lower()
     if any(m in low for m in PAYWALL_MARKS):
-        return {"url": url, "status": "paywall", "text": "paywall/challenge marker found"}
+        return _fallback(url, {"url": url, "status": "paywall",
+                               "text": "paywall/challenge marker found"})
     text = html_to_text(raw)
     if len(text) < 300 and any(m in raw for m in JS_MARKS):
-        return {"url": url, "status": "js-empty",
-                "text": "client-rendered shell, no readable text"}
+        return _fallback(url, {"url": url, "status": "js-empty",
+                               "text": "client-rendered shell, no readable text"})
     if not text.strip():
-        return {"url": url, "status": "error", "text": "empty after parsing"}
-    return {"url": url, "status": "ok", "text": text[:MAX_CHARS]}
+        return _fallback(url, {"url": url, "status": "error",
+                               "text": "empty after parsing"})
+    return {"url": url, "status": "ok", "text": text[:MAX_CHARS], "via": "direct"}
+
+
+def _fallback(url, first):
+    """Mitigation chain for M2 (link-live), refs jina-ai/reader + Wikipedia API:
+    1. *.wikipedia.org -> official REST API (no scraping, no key).
+    2. anything else -> Jina Reader proxy (headless render, free, no key).
+    Honors JINA_FALLBACK=0 to disable. Returns first failure if all miss."""
+    import os
+    import time
+    import urllib.parse
+    if os.environ.get("JINA_FALLBACK", "1") == "0":
+        return first
+    m = re.match(r"https?://([a-z-]+)\.wikipedia\.org/wiki/(.+)", url)
+    if m:
+        try:
+            api = (f"https://{m.group(1)}.wikipedia.org/api/rest_v1/page/html/"
+                   + urllib.parse.quote(m.group(2), safe="%/()"))
+            req = urllib.request.Request(api, headers=UA)
+            with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+                text = html_to_text(r.read(MAX_BYTES).decode("utf-8", "ignore"))
+            if len(text.strip()) >= 300:
+                return {"url": url, "status": "ok",
+                        "text": text[:MAX_CHARS], "via": "wikipedia-api"}
+        except Exception:
+            pass
+    try:
+        time.sleep(float(os.environ.get("JINA_GAP", "3")))
+        req = urllib.request.Request("https://r.jina.ai/" + url, headers=UA)
+        with urllib.request.urlopen(req, timeout=45) as r:
+            body = r.read(MAX_BYTES).decode("utf-8", "ignore")
+        lines = [ln for ln in body.splitlines()
+                 if not ln.startswith(("Title:", "URL Source:", "Published ",
+                                       "Markdown Content:"))]
+        text = re.sub(r"\s+", " ", "\n".join(lines)).strip()
+        bad = ("warning: target", "403 forbidden", "invalid url", "404 not found")
+        if len(text) >= 300 and not any(b in text.lower()[:500] for b in bad):
+            return {"url": url, "status": "ok",
+                    "text": text[:MAX_CHARS], "via": "jina-reader"}
+    except Exception:
+        pass
+    return first
