@@ -1,0 +1,98 @@
+{
+  "P1": [
+    {
+      "url": "https://en.wikipedia.org/wiki/Sushi",
+      "http": 200,
+      "live": true
+    },
+    {
+      "url": "https://jateng.antaranews.com/berita/580413/otoritas-irlandia-denda-tiktok-rp98-t",
+      "http": 200,
+      "live": true
+    },
+    {
+      "url": "https://news.ddtc.co.id/berita/daerah/1812413/trump-pangkas-bea-masuk-atas-barang-uni-eropa-dari-25-ke-15",
+      "http": 200,
+      "live": true
+    },
+    {
+      "url": "https://www.instagram.com/p/DbkPC4OESSy/",
+      "http": 200,
+      "live": true
+    },
+    {
+      "url": "https://xpert.digital/id/pengamatan-ai/",
+      "http": 200,
+      "live": true
+    }
+  ],
+  "P2": [
+    {
+      "url": "https://stkippgribl.ac.id/opini/profil-veda-ega-pratama-pembalap-indonesia-di-moto3-2026/",
+      "http": 200,
+      "live": true
+    },
+    {
+      "url": "https://www.instagram.com/p/DVTmLw1EhSA/",
+      "http": 200,
+      "live": true
+    },
+    {
+      "url": "https://www.instagram.com/reel/DRXDPkiCWeQ/",
+      "http": 200,
+      "live": true
+    },
+    {
+      "url": "https://www.instagram.com/reel/DcvnLWMhhXM/",
+      "http": 200,
+      "live": true
+    },
+    {
+      "url": "https://www.kemenpora.go.id/detail/6457/hasil-kualifikasi-motogp-mandalika-2025-marco-bezzecchi-rebut-start-posisi-terdepan",
+      "http": 200,
+      "live": true
+    },
+    {
+      "url": "https://www.motogp.com/id/gp-results",
+      "http": 200,
+      "live": true
+    }
+  ],
+  "P3": [
+    {
+      "url": "https://ar.wikipedia.org/wiki/%D8%A8%D9%88%D8%A7%D8%A8%D8%A9:%D9%81%D8%B1%D9%86%D8%B3%D8%A7",
+      "http": 200,
+      "live": true
+    },
+    {
+      "url": "https://ar.wikipedia.org/wiki/%D9%81%D8%B1%D9%86%D8%B3%D8%A7",
+      "http": 200,
+      "live": true
+    },
+    {
+      "url": "https://arz.wikipedia.org/wiki/%D9%81%D8%B1%D9%86%D8%B3%D8%A7",
+      "http": 200,
+      "live": true
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Microsoft",
+      "http": 200,
+      "live": true
+    },
+    {
+      "url": "https://kab-pegununganbintang.kpu.go.id/blog/category/104?page=26",
+      "http": 200,
+      "live": true
+    },
+    {
+      "url": "https://www.instagram.com/reel/DU_2-1tE1SQ/",
+      "http": 200,
+      "live": true
+    },
+    {
+      "url": "https://www.instagram.com/reel/DdAvz6eSKDP/",
+      "http": 200,
+      "live": true
+    }
+  ]
+}

@@ -1,0 +1,108 @@
+{
+  "query": "Siapa pemenang balapan utama MotoGP Mandalika 2026 dan selisih waktu dengan posisi kedua",
+  "mode": "pro",
+  "provider": "auto",
+  "synth": "llm",
+  "queries_used": [
+    "Siapa pemenang balapan utama MotoGP Mandalika 2026 dan selisih waktu dengan posisi kedua",
+    "Siapa pemenang balapan utama MotoGP Mandalika 2026 dan selisih waktu dengan posisi kedua data statistics",
+    "\"Siapa pemenang balapan utama\"",
+    "Siapa pemenang balapan utama MotoGP Mandalika 2026 dan selisih waktu dengan posisi kedua 2026",
+    "Siapa pemenang balapan utama MotoGP Mandalika 2026 dan selisih waktu dengan posisi kedua study OR paper OR report",
+    "Siapa pemenang balapan utama MotoGP Mandalika 2026 dan selisih waktu dengan posisi kedua site:go.id OR site:ac.id OR site:edu"
+  ],
+  "n_candidates": 36,
+  "ranked": [
+    {
+      "url": "https://lib.itenas.ac.id/emag/koran/2025/JABAR_OKTOBER2025/JABAR_20251006/files/basic-html/page7.html",
+      "score": 3.6846,
+      "method": "heuristic-v1"
+    },
+    {
+      "url": "https://www.kemenpora.go.id/detail/6457/hasil-kualifikasi-motogp-mandalika-2025-marco-bezzecchi-rebut-start-posisi-terdepan",
+      "score": 3.2231,
+      "method": "heuristic-v1"
+    },
+    {
+      "url": "https://stkippgribl.ac.id/opini/profil-veda-ega-pratama-pembalap-indonesia-di-moto3-2026/",
+      "score": 2.7615,
+      "method": "heuristic-v1"
+    },
+    {
+      "url": "https://www.instagram.com/reel/DcvnLWMhhXM/",
+      "score": 1.4538,
+      "method": "heuristic-v1"
+    },
+    {
+      "url": "https://www.instagram.com/p/DVTmLw1EhSA/",
+      "score": 1.4538,
+      "method": "heuristic-v1"
+    },
+    {
+      "url": "https://www.motogp.com/id/gp-results",
+      "score": 1.4538,
+      "method": "heuristic-v1"
+    },
+    {
+      "url": "https://www.instagram.com/reel/DRXDPkiCWeQ/",
+      "score": 1.2231,
+      "method": "heuristic-v1"
+    },
+    {
+      "url": "https://www.facebook.com/groups/317941417371237/posts/923924213439618/",
+      "score": 1.2231,
+      "method": "heuristic-v1"
+    }
+  ],
+  "fetched": [
+    {
+      "url": "https://lib.itenas.ac.id/emag/koran/2025/JABAR_OKTOBER2025/JABAR_20251006/files/basic-html/page7.html",
+      "status": "error",
+      "via": "direct"
+    },
+    {
+      "url": "https://www.kemenpora.go.id/detail/6457/hasil-kualifikasi-motogp-mandalika-2025-marco-bezzecchi-rebut-start-posisi-terdepan",
+      "status": "ok",
+      "via": "direct"
+    },
+    {
+      "url": "https://stkippgribl.ac.id/opini/profil-veda-ega-pratama-pembalap-indonesia-di-moto3-2026/",
+      "status": "ok",
+      "via": "direct"
+    },
+    {
+      "url": "https://www.instagram.com/reel/DcvnLWMhhXM/",
+      "status": "ok",
+      "via": "direct"
+    },
+    {
+      "url": "https://www.instagram.com/p/DVTmLw1EhSA/",
+      "status": "ok",
+      "via": "direct"
+    },
+    {
+      "url": "https://www.motogp.com/id/gp-results",
+      "status": "ok",
+      "via": "direct"
+    },
+    {
+      "url": "https://www.instagram.com/reel/DRXDPkiCWeQ/",
+      "status": "ok",
+      "via": "direct"
+    },
+    {
+      "url": "https://www.facebook.com/groups/317941417371237/posts/923924213439618/",
+      "status": "error",
+      "via": "direct"
+    }
+  ],
+  "n_evidence": 6,
+  "verdict": {
+    "n": 1,
+    "verified": 0,
+    "unverified": 1,
+    "pass_rate": 0.0
+  },
+  "elapsed_s": 37.8,
+  "ts": "2026-09-15T02:22:47.649106+00:00"
+}

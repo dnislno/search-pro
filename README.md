@@ -72,3 +72,11 @@ python scripts/rerank.py --input candidates.json --query "..." --advanced
 `--advanced` rerank service · academic/YouTube/Reddit verticals (Perplexica-style) · scheduled deep-research runs · OpenAI-compatible `/search` API · paywall corroboration (`corroborate.py`, v2.2.0 experiment: figure-search + independence + grade).
 
 MIT-licensed. Star it, self-host it, and hold every answer to its sources.
+
+---
+
+## Study case: raw model vs system (A/B benchmark)
+
+Neutral, pre-registered benchmark report with frozen transcripts, independent
+link re-checks, and an explicit statement of what is and isn't proven:
+[STUDY-CASE.md](STUDY-CASE.md) (protocol + evidence in `study/`).

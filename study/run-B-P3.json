@@ -1,0 +1,108 @@
+{
+  "query": "Harga resmi iPhone 17 Pro 256GB Indonesia saat peluncuran dan harga termurah marketplace September 2026",
+  "mode": "pro",
+  "provider": "auto",
+  "synth": "llm",
+  "queries_used": [
+    "Harga resmi iPhone 17 Pro 256GB Indonesia saat peluncuran dan harga termurah marketplace September 2026",
+    "Harga resmi iPhone 17 Pro 256GB Indonesia saat peluncuran dan harga termurah marketplace September 2026 data statistics",
+    "\"Harga resmi iPhone 256GB\"",
+    "Harga resmi iPhone 17 Pro 256GB Indonesia saat peluncuran dan harga termurah marketplace September 2026 2026",
+    "Harga resmi iPhone 17 Pro 256GB Indonesia saat peluncuran dan harga termurah marketplace September 2026 study OR paper OR report",
+    "Harga resmi iPhone 17 Pro 256GB Indonesia saat peluncuran dan harga termurah marketplace September 2026 site:go.id OR site:ac.id OR site:edu"
+  ],
+  "n_candidates": 36,
+  "ranked": [
+    {
+      "url": "https://kab-pegununganbintang.kpu.go.id/blog/category/104?page=26",
+      "score": 2.9923,
+      "method": "heuristic-v1"
+    },
+    {
+      "url": "https://ar.wikipedia.org/wiki/%D9%81%D8%B1%D9%86%D8%B3%D8%A7",
+      "score": 2.0,
+      "method": "heuristic-v1"
+    },
+    {
+      "url": "https://arz.wikipedia.org/wiki/%D9%81%D8%B1%D9%86%D8%B3%D8%A7",
+      "score": 2.0,
+      "method": "heuristic-v1"
+    },
+    {
+      "url": "https://ar.wikipedia.org/wiki/%D8%A8%D9%88%D8%A7%D8%A8%D8%A9:%D9%81%D8%B1%D9%86%D8%B3%D8%A7",
+      "score": 2.0,
+      "method": "heuristic-v1"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Microsoft",
+      "score": 2.0,
+      "method": "heuristic-v1"
+    },
+    {
+      "url": "https://www.instagram.com/reel/DU_2-1tE1SQ/",
+      "score": 1.6846,
+      "method": "heuristic-v1"
+    },
+    {
+      "url": "https://www.instagram.com/reel/DdAvz6eSKDP/",
+      "score": 1.6846,
+      "method": "heuristic-v1"
+    },
+    {
+      "url": "https://cekipsaya.com/faq/",
+      "score": 1.4538,
+      "method": "heuristic-v1"
+    }
+  ],
+  "fetched": [
+    {
+      "url": "https://kab-pegununganbintang.kpu.go.id/blog/category/104?page=26",
+      "status": "ok",
+      "via": "direct"
+    },
+    {
+      "url": "https://ar.wikipedia.org/wiki/%D9%81%D8%B1%D9%86%D8%B3%D8%A7",
+      "status": "ok",
+      "via": "direct"
+    },
+    {
+      "url": "https://arz.wikipedia.org/wiki/%D9%81%D8%B1%D9%86%D8%B3%D8%A7",
+      "status": "ok",
+      "via": "direct"
+    },
+    {
+      "url": "https://ar.wikipedia.org/wiki/%D8%A8%D9%88%D8%A7%D8%A8%D8%A9:%D9%81%D8%B1%D9%86%D8%B3%D8%A7",
+      "status": "ok",
+      "via": "direct"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Microsoft",
+      "status": "ok",
+      "via": "wikipedia-api"
+    },
+    {
+      "url": "https://www.instagram.com/reel/DU_2-1tE1SQ/",
+      "status": "ok",
+      "via": "direct"
+    },
+    {
+      "url": "https://www.instagram.com/reel/DdAvz6eSKDP/",
+      "status": "ok",
+      "via": "direct"
+    },
+    {
+      "url": "https://cekipsaya.com/faq/",
+      "status": "paywall",
+      "via": "direct"
+    }
+  ],
+  "n_evidence": 7,
+  "verdict": {
+    "n": 1,
+    "verified": 0,
+    "unverified": 1,
+    "pass_rate": 0.0
+  },
+  "elapsed_s": 34.8,
+  "ts": "2026-09-15T02:23:38.489932+00:00"
+}
